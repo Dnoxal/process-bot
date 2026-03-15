@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Process Tracker Dashboard</title>
+    <link rel="stylesheet" href="/static/dashboard.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">CS Careers Process Tracker</p>
+        <h1>Recruiting pulse for your Discord server</h1>
+        <p class="lede">
+          Log updates in Discord with <code>!process</code>. This dashboard turns them into company stats,
+          stage trends, and outcome snapshots.
+        </p>
+      </section>
+
+      <section class="grid metrics" id="metric-cards"></section>
+
+      <section class="panel searchable-panel" aria-labelledby="company-search-heading">
+        <div class="panel-header">
+          <div>
+            <h2 id="company-search-heading">Company lookup</h2>
+            <p>Search for an exact company and inspect its recruiting funnel with readable graphs.</p>
+          </div>
+        </div>
+        <form id="company-search-form" class="company-search" role="search">
+          <label class="search-label" for="company-search-input">Find company stats</label>
+          <div class="search-controls">
+            <input
+              id="company-search-input"
+              name="company"
+              type="search"
+              list="company-options"
+              autocomplete="off"
+              placeholder="Type a company name"
+              aria-describedby="company-search-help company-search-status"
+            />
+            <button type="submit">Search</button>
+          </div>
+          <datalist id="company-options"></datalist>
+          <p id="company-search-help" class="helper-copy">Try an exact tracked company like Amazon or Stripe.</p>
+          <p id="company-search-status" class="status-copy" aria-live="polite"></p>
+        </form>
+        <div id="company-details" class="company-details" hidden>
+          <div class="company-summary" id="company-summary"></div>
+          <div class="two-up company-graphs">
+            <article class="panel chart-panel">
+              <div class="panel-header">
+                <h3>Stage graph</h3>
+                <p>Per-stage event counts for the selected company.</p>
+              </div>
+              <div id="company-stage-chart" class="chart" role="img" aria-label="Company stage distribution graph"></div>
+            </article>
+            <article class="panel chart-panel">
+              <div class="panel-header">
+                <h3>Outcome graph</h3>
+                <p>Per-outcome event counts for the selected company.</p>
+              </div>
+              <div id="company-outcome-chart" class="chart" role="img" aria-label="Company outcome distribution graph"></div>
+            </article>
+          </div>
+          <article class="panel chart-panel">
+            <div class="panel-header">
+              <h3>Activity trend graph</h3>
+              <p>Daily logging volume for the selected company.</p>
+            </div>
+            <div id="company-trend-chart" class="chart trend-plot" role="img" aria-label="Company activity trend graph"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Top companies</h2>
+          <p>Most logged recruiting activity across your server.</p>
+        </div>
+        <div id="top-companies" class="list"></div>
+      </section>
+
+      <section class="two-up">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Stage distribution</h2>
+            <p>Which parts of the funnel show up most often.</p>
+          </div>
+          <div id="stage-distribution" class="list"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Outcome distribution</h2>
+            <p>High-level result mix from logged events.</p>
+          </div>
+          <div id="outcome-distribution" class="list"></div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Activity trend</h2>
+          <p>Daily process logging volume.</p>
+        </div>
+        <div id="trend-chart" class="trend-chart"></div>
+      </section>
+    </main>
+
+    <script src="/static/dashboard.js"></script>
+  </body>
+</html>
