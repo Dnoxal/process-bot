@@ -9,25 +9,35 @@
   <body>
     <main class="page">
       <section class="hero">
-        <p class="eyebrow">CS Careers Process Tracker</p>
-        <h1>Recruiting pulse for your Discord server</h1>
-        <p class="lede">
-          Log updates in Discord with <code>!process</code>. This dashboard turns them into company stats,
-          stage trends, and outcome snapshots.
-        </p>
+        <div class="hero-copy">
+          <p class="eyebrow">Private Recruiting Analytics</p>
+          <h1>Turn Discord updates into a clean recruiting intelligence board.</h1>
+          <p class="lede">
+            Search any tracked company, inspect exact funnel stats, and scan the server-wide picture with live bar,
+            line, and doughnut charts.
+          </p>
+        </div>
+        <div class="hero-card">
+          <p class="hero-card-label">Recommended flow</p>
+          <ol class="hero-steps">
+            <li>Run <code>/process</code> in Discord</li>
+            <li>Open this dashboard</li>
+            <li>Search a company for exact stats</li>
+          </ol>
+        </div>
       </section>
 
-      <section class="grid metrics" id="metric-cards"></section>
+      <section class="metric-grid" id="metric-cards" aria-label="Global summary metrics"></section>
 
-      <section class="panel searchable-panel" aria-labelledby="company-search-heading">
+      <section class="panel search-panel" aria-labelledby="company-search-heading">
         <div class="panel-header">
           <div>
-            <h2 id="company-search-heading">Company lookup</h2>
-            <p>Search for an exact company and inspect its recruiting funnel with readable graphs.</p>
+            <h2 id="company-search-heading">Company Explorer</h2>
+            <p>Search tracked companies and see exact recruiting stats rendered as real charts.</p>
           </div>
         </div>
         <form id="company-search-form" class="company-search" role="search">
-          <label class="search-label" for="company-search-input">Find company stats</label>
+          <label class="search-label" for="company-search-input">Search for a tracked company</label>
           <div class="search-controls">
             <input
               id="company-search-input"
@@ -35,78 +45,96 @@
               type="search"
               list="company-options"
               autocomplete="off"
-              placeholder="Type a company name"
+              placeholder="Amazon, Stripe, Meta..."
               aria-describedby="company-search-help company-search-status"
             />
-            <button type="submit">Search</button>
+            <button type="submit">Show stats</button>
           </div>
           <datalist id="company-options"></datalist>
-          <p id="company-search-help" class="helper-copy">Try an exact tracked company like Amazon or Stripe.</p>
+          <p id="company-search-help" class="helper-copy">Use the exact tracked company name from the suggestions.</p>
           <p id="company-search-status" class="status-copy" aria-live="polite"></p>
         </form>
+
         <div id="company-details" class="company-details" hidden>
-          <div class="company-summary" id="company-summary"></div>
-          <div class="two-up company-graphs">
+          <div id="company-summary" class="summary-grid"></div>
+          <div class="chart-grid chart-grid-two">
             <article class="panel chart-panel">
-              <div class="panel-header">
-                <h3>Stage graph</h3>
-                <p>Per-stage event counts for the selected company.</p>
+              <div class="panel-header compact">
+                <div>
+                  <h3>Stage breakdown</h3>
+                  <p>Bar chart of the selected company’s funnel activity.</p>
+                </div>
               </div>
-              <div id="company-stage-chart" class="chart" role="img" aria-label="Company stage distribution graph"></div>
+              <div class="canvas-wrap"><canvas id="company-stage-chart" aria-label="Company stage bar chart"></canvas></div>
             </article>
+
             <article class="panel chart-panel">
-              <div class="panel-header">
-                <h3>Outcome graph</h3>
-                <p>Per-outcome event counts for the selected company.</p>
+              <div class="panel-header compact">
+                <div>
+                  <h3>Outcome mix</h3>
+                  <p>Doughnut chart of final outcomes for the selected company.</p>
+                </div>
               </div>
-              <div id="company-outcome-chart" class="chart" role="img" aria-label="Company outcome distribution graph"></div>
+              <div class="canvas-wrap"><canvas id="company-outcome-chart" aria-label="Company outcome doughnut chart"></canvas></div>
             </article>
           </div>
+
           <article class="panel chart-panel">
-            <div class="panel-header">
-              <h3>Activity trend graph</h3>
-              <p>Daily logging volume for the selected company.</p>
+            <div class="panel-header compact">
+              <div>
+                <h3>Activity over time</h3>
+                <p>Line chart of daily log volume for the selected company.</p>
+              </div>
             </div>
-            <div id="company-trend-chart" class="chart trend-plot" role="img" aria-label="Company activity trend graph"></div>
+            <div class="canvas-wrap wide"><canvas id="company-trend-chart" aria-label="Company activity line chart"></canvas></div>
           </article>
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Top companies</h2>
-          <p>Most logged recruiting activity across your server.</p>
-        </div>
-        <div id="top-companies" class="list"></div>
-      </section>
-
-      <section class="two-up">
-        <article class="panel">
-          <div class="panel-header">
-            <h2>Stage distribution</h2>
-            <p>Which parts of the funnel show up most often.</p>
+      <section class="chart-grid">
+        <article class="panel chart-panel">
+          <div class="panel-header compact">
+            <div>
+              <h2>Top companies</h2>
+              <p>Most logged recruiting activity across your server.</p>
+            </div>
           </div>
-          <div id="stage-distribution" class="list"></div>
+          <div class="canvas-wrap wide"><canvas id="top-companies-chart" aria-label="Top companies bar chart"></canvas></div>
         </article>
 
-        <article class="panel">
-          <div class="panel-header">
-            <h2>Outcome distribution</h2>
-            <p>High-level result mix from logged events.</p>
+        <article class="panel chart-panel">
+          <div class="panel-header compact">
+            <div>
+              <h2>Stage distribution</h2>
+              <p>Where most updates land in the recruiting funnel.</p>
+            </div>
           </div>
-          <div id="outcome-distribution" class="list"></div>
+          <div class="canvas-wrap"><canvas id="stage-distribution-chart" aria-label="Global stage doughnut chart"></canvas></div>
         </article>
-      </section>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Activity trend</h2>
-          <p>Daily process logging volume.</p>
-        </div>
-        <div id="trend-chart" class="trend-chart"></div>
+        <article class="panel chart-panel">
+          <div class="panel-header compact">
+            <div>
+              <h2>Outcome distribution</h2>
+              <p>How reported recruiting outcomes are trending overall.</p>
+            </div>
+          </div>
+          <div class="canvas-wrap"><canvas id="outcome-distribution-chart" aria-label="Global outcome pie chart"></canvas></div>
+        </article>
+
+        <article class="panel chart-panel">
+          <div class="panel-header compact">
+            <div>
+              <h2>Activity trend</h2>
+              <p>Daily process logging volume across the whole server.</p>
+            </div>
+          </div>
+          <div class="canvas-wrap wide"><canvas id="global-trend-chart" aria-label="Global activity line chart"></canvas></div>
+        </article>
       </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/static/dashboard.js"></script>
   </body>
 </html>

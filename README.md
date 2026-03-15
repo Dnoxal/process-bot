@@ -12,7 +12,7 @@ Private Discord recruiting tracker for logging process updates and viewing light
 
 ## Quick start
 
-1. Create a Discord bot in the Discord developer portal and enable the **Message Content Intent**.
+1. Create a Discord bot in the Discord developer portal.
 2. Copy `.env.example` to `.env` and fill in `DISCORD_TOKEN`.
 3. Install dependencies:
 
@@ -28,19 +28,17 @@ Private Discord recruiting tracker for logging process updates and viewing light
 
 5. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-If startup fails with a privileged intents error, go to `Discord Developer Portal -> Applications -> your bot -> Bot -> Privileged Gateway Intents` and turn on `Message Content Intent`. This MVP uses prefix commands like `!process`, so that setting is required.
+If you set `DISCORD_GUILD_ID`, slash commands sync directly into that guild and usually appear quickly. Without it, commands sync globally and can take longer to show up.
 
 ## Commands
 
-- `!process <company> <stage>`
-- `!process <company> <outcome> <stage>`
-- `!process <company> <terminal outcome>`
-- `!myprocesses`
-- `!companies`
-- `!stats <company>`
-- `!help process`
+- `/process company:<name> stage:<stage> outcome:<optional>`
+- `/myprocesses`
+- `/companies`
+- `/stats company:<name>`
+- `/help`
 
-For terminal outcomes like `offer` or `rejected` without a stage, the MVP stores them as the `final` stage.
+Bot replies are ephemeral because the MVP now uses slash commands instead of prefix commands.
 
 ## API routes
 

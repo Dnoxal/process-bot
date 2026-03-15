@@ -7,6 +7,18 @@ async function fetchJson(url) {
 }
 
 let companies = [];
+const charts = {};
+
+const palette = {
+  accent: "#d56f45",
+  accentDeep: "#8f3f22",
+  gold: "#f1b15c",
+  teal: "#3b8274",
+  rose: "#c96a7a",
+  ink: "#1f1a17",
+  muted: "#66594f",
+  soft: ["#d56f45", "#f1b15c", "#3b8274", "#c96a7a", "#8f3f22", "#a8b765", "#5b6fb3", "#e58c8a"],
+};
 
 function humanizeLabel(value) {
   return value
@@ -15,106 +27,82 @@ function humanizeLabel(value) {
     .join(" ");
 }
 
+function metricCard(label, value) {
+  return `
+    <article class="metric-card">
+      <div class="metric-label">${label}</div>
+      <div class="metric-value">${value}</div>
+    </article>
+  `;
+}
+
+function destroyChart(name) {
+  if (charts[name]) {
+    charts[name].destroy();
+    charts[name] = null;
+  }
+}
+
+function createChart(name, elementId, config) {
+  destroyChart(name);
+  const context = document.getElementById(elementId);
+  charts[name] = new Chart(context, config);
+}
+
+function baseOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: palette.muted,
+          font: {
+            family: "Avenir Next, Segoe UI, sans-serif",
+          },
+        },
+      },
+      tooltip: {
+        backgroundColor: "rgba(31, 26, 23, 0.92)",
+        titleColor: "#fffaf6",
+        bodyColor: "#fffaf6",
+        padding: 12,
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: palette.muted },
+        grid: { color: "rgba(31, 26, 23, 0.06)" },
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { color: palette.muted, precision: 0 },
+        grid: { color: "rgba(31, 26, 23, 0.08)" },
+      },
+    },
+  };
+}
+
 function renderMetrics(stats) {
   const container = document.getElementById("metric-cards");
-  const metrics = [
-    ["Total events", stats.total_events],
-    ["Members logging", stats.total_users],
-    ["Companies tracked", stats.total_companies],
-  ];
-  container.innerHTML = metrics
-    .map(
-      ([label, value]) => `
-        <article class="metric-card">
-          <div class="metric-label">${label}</div>
-          <div class="metric-value">${value}</div>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderList(containerId, entries, keyLabel) {
-  const container = document.getElementById(containerId);
-  if (!entries.length) {
-    container.innerHTML = `<div class="list-row"><strong>No data yet</strong><span>Start logging in Discord</span></div>`;
-    return;
-  }
-
-  container.innerHTML = entries
-    .map(
-      ([label, value]) => `
-        <div class="list-row">
-          <strong>${label}</strong>
-          <span>${value} ${keyLabel}</span>
-        </div>
-      `
-    )
-    .join("");
-}
-
-function renderTopCompanies(topCompanies) {
-  const entries = topCompanies.map((row) => [row.company, row.events]);
-  renderList("top-companies", entries, "events");
-}
-
-function renderDistribution(containerId, values) {
-  renderList(
-    containerId,
-    Object.entries(values).map(([label, value]) => [humanizeLabel(label), value]),
-    "logs"
-  );
-}
-
-function renderTrends(points) {
-  const container = document.getElementById("trend-chart");
-  if (!points.length) {
-    container.innerHTML = `<div class="list-row"><strong>No trend data yet</strong><span>Events appear after your first logs</span></div>`;
-    return;
-  }
-
-  const maxEvents = Math.max(...points.map((point) => point.events), 1);
-  container.innerHTML = points
-    .map((point) => {
-      const width = `${Math.max((point.events / maxEvents) * 100, 4)}%`;
-      return `
-        <div class="trend-row">
-          <span>${point.period_start}</span>
-          <div class="trend-bar">
-            <div class="trend-bar-fill" style="width: ${width}"></div>
-          </div>
-          <strong>${point.events}</strong>
-        </div>
-      `;
-    })
-    .join("");
-}
-
-function renderCompanyOptions(items) {
-  const datalist = document.getElementById("company-options");
-  datalist.innerHTML = items
-    .map((company) => `<option value="${company.name}"></option>`)
-    .join("");
-}
-
-function setSearchStatus(message, tone = "default") {
-  const status = document.getElementById("company-search-status");
-  status.textContent = message;
-  status.style.color = tone === "success" ? "var(--success)" : "var(--muted)";
+  container.innerHTML = [
+    metricCard("Total events", stats.total_events),
+    metricCard("Members logging", stats.total_users),
+    metricCard("Companies tracked", stats.total_companies),
+  ].join("");
 }
 
 function renderSummary(stats) {
-  const summary = document.getElementById("company-summary");
   const latestActivity = stats.latest_activity
     ? new Date(stats.latest_activity).toLocaleDateString()
     : "No activity yet";
-  const cards = [
+  const container = document.getElementById("company-summary");
+  container.innerHTML = [
     ["Company", stats.company],
     ["Events", stats.total_events],
     ["Candidates", stats.total_candidates],
     ["Latest activity", latestActivity],
-  ];
-  summary.innerHTML = cards
+  ]
     .map(
       ([label, value]) => `
         <article class="summary-card">
@@ -126,81 +114,172 @@ function renderSummary(stats) {
     .join("");
 }
 
-function renderBarChart(containerId, values, emptyMessage) {
-  const container = document.getElementById(containerId);
-  const entries = Object.entries(values).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
-  if (!entries.length) {
-    container.innerHTML = `<div class="list-row"><strong>${emptyMessage}</strong><span>Log more data in Discord</span></div>`;
-    return;
-  }
-
-  const maxValue = Math.max(...entries.map(([, value]) => value), 1);
-  container.innerHTML = entries
-    .map(([label, value]) => {
-      const width = `${Math.max((value / maxValue) * 100, 6)}%`;
-      const readableLabel = humanizeLabel(label);
-      return `
-        <div class="chart-row">
-          <span class="chart-label">${readableLabel}</span>
-          <div class="chart-track" aria-hidden="true">
-            <div class="chart-fill" style="width: ${width}"></div>
-          </div>
-          <span class="chart-value">${value}</span>
-        </div>
-      `;
-    })
-    .join("");
+function setSearchStatus(message, tone = "default") {
+  const status = document.getElementById("company-search-status");
+  status.textContent = message;
+  status.style.color = tone === "success" ? "var(--success)" : "var(--muted)";
 }
 
-function renderTrendPlot(points) {
-  const container = document.getElementById("company-trend-chart");
-  if (!points.length) {
-    container.innerHTML = `<div class="list-row"><strong>No trend data yet</strong><span>Track a few events first</span></div>`;
-    return;
-  }
-
-  const width = 720;
-  const height = 220;
-  const padding = 22;
-  const maxEvents = Math.max(...points.map((point) => point.events), 1);
-  const step = points.length === 1 ? width - padding * 2 : (width - padding * 2) / (points.length - 1);
-  const coordinates = points.map((point, index) => {
-    const x = padding + index * step;
-    const y = height - padding - ((height - padding * 2) * point.events) / maxEvents;
-    return { ...point, x, y };
-  });
-  const polyline = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
-
-  container.innerHTML = `
-    <div class="trend-svg-wrap">
-      <svg viewBox="0 0 ${width} ${height}" aria-hidden="true">
-        <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="rgba(31, 26, 23, 0.18)" stroke-width="2"></line>
-        <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="rgba(31, 26, 23, 0.12)" stroke-width="2"></line>
-        <polyline fill="none" stroke="#d97143" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="${polyline}"></polyline>
-        ${coordinates
-          .map(
-            (point) => `
-              <circle cx="${point.x}" cy="${point.y}" r="5" fill="#9f4720">
-                <title>${point.period_start}: ${point.events} events</title>
-              </circle>
-            `
-          )
-          .join("")}
-      </svg>
-    </div>
-    <div class="trend-axis">
-      <span>${points[0].period_start}</span>
-      <span>${points[points.length - 1].period_start}</span>
-    </div>
-    <div class="trend-caption">
-      <span>Peak volume: ${maxEvents} events</span>
-      <span>${points.length} day${points.length === 1 ? "" : "s"} tracked</span>
-    </div>
-  `;
+function renderCompanyOptions(items) {
+  const datalist = document.getElementById("company-options");
+  datalist.innerHTML = items.map((company) => `<option value="${company.name}"></option>`).join("");
 }
 
 function findCompanyByName(name) {
   return companies.find((company) => company.name.toLowerCase() === name.trim().toLowerCase()) || null;
+}
+
+function renderTopCompaniesChart(topCompanies) {
+  createChart("topCompanies", "top-companies-chart", {
+    type: "bar",
+    data: {
+      labels: topCompanies.map((row) => row.company),
+      datasets: [
+        {
+          label: "Events",
+          data: topCompanies.map((row) => row.events),
+          backgroundColor: palette.soft,
+          borderRadius: 12,
+        },
+      ],
+    },
+    options: {
+      ...baseOptions(),
+      plugins: { ...baseOptions().plugins, legend: { display: false } },
+    },
+  });
+}
+
+function renderGlobalStageChart(stageDistribution) {
+  const entries = Object.entries(stageDistribution);
+  createChart("globalStages", "stage-distribution-chart", {
+    type: "doughnut",
+    data: {
+      labels: entries.map(([label]) => humanizeLabel(label)),
+      datasets: [
+        {
+          data: entries.map(([, value]) => value),
+          backgroundColor: palette.soft,
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: baseOptions().plugins,
+    },
+  });
+}
+
+function renderGlobalOutcomeChart(outcomeDistribution) {
+  const entries = Object.entries(outcomeDistribution);
+  createChart("globalOutcomes", "outcome-distribution-chart", {
+    type: "pie",
+    data: {
+      labels: entries.map(([label]) => humanizeLabel(label)),
+      datasets: [
+        {
+          data: entries.map(([, value]) => value),
+          backgroundColor: palette.soft,
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: baseOptions().plugins,
+    },
+  });
+}
+
+function renderGlobalTrendChart(points) {
+  createChart("globalTrend", "global-trend-chart", {
+    type: "line",
+    data: {
+      labels: points.map((point) => point.period_start),
+      datasets: [
+        {
+          label: "Daily events",
+          data: points.map((point) => point.events),
+          borderColor: palette.accent,
+          backgroundColor: "rgba(213, 111, 69, 0.16)",
+          fill: true,
+          tension: 0.28,
+          pointBackgroundColor: palette.accentDeep,
+          pointRadius: 4,
+        },
+      ],
+    },
+    options: baseOptions(),
+  });
+}
+
+function renderCompanyStageChart(stageDistribution) {
+  const entries = Object.entries(stageDistribution);
+  createChart("companyStage", "company-stage-chart", {
+    type: "bar",
+    data: {
+      labels: entries.map(([label]) => humanizeLabel(label)),
+      datasets: [
+        {
+          label: "Events",
+          data: entries.map(([, value]) => value),
+          backgroundColor: [palette.accent, palette.gold, palette.teal, palette.rose, palette.accentDeep],
+          borderRadius: 12,
+        },
+      ],
+    },
+    options: {
+      ...baseOptions(),
+      plugins: { ...baseOptions().plugins, legend: { display: false } },
+    },
+  });
+}
+
+function renderCompanyOutcomeChart(outcomeDistribution) {
+  const entries = Object.entries(outcomeDistribution);
+  createChart("companyOutcome", "company-outcome-chart", {
+    type: "doughnut",
+    data: {
+      labels: entries.length ? entries.map(([label]) => humanizeLabel(label)) : ["No outcomes yet"],
+      datasets: [
+        {
+          data: entries.length ? entries.map(([, value]) => value) : [1],
+          backgroundColor: entries.length ? palette.soft : ["rgba(31, 26, 23, 0.12)"],
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: baseOptions().plugins,
+    },
+  });
+}
+
+function renderCompanyTrendChart(points) {
+  createChart("companyTrend", "company-trend-chart", {
+    type: "line",
+    data: {
+      labels: points.length ? points.map((point) => point.period_start) : ["No data"],
+      datasets: [
+        {
+          label: "Daily events",
+          data: points.length ? points.map((point) => point.events) : [0],
+          borderColor: palette.teal,
+          backgroundColor: "rgba(59, 130, 116, 0.15)",
+          fill: true,
+          tension: 0.3,
+          pointBackgroundColor: palette.teal,
+          pointRadius: 4,
+        },
+      ],
+    },
+    options: baseOptions(),
+  });
 }
 
 async function loadCompanyDetails(company) {
@@ -209,9 +288,9 @@ async function loadCompanyDetails(company) {
     fetchJson(`/api/stats/trends?company_slug=${encodeURIComponent(company.slug)}`),
   ]);
   renderSummary(stats);
-  renderBarChart("company-stage-chart", stats.stage_distribution, "No stage data yet");
-  renderBarChart("company-outcome-chart", stats.outcome_distribution, "No outcome data yet");
-  renderTrendPlot(trends);
+  renderCompanyStageChart(stats.stage_distribution);
+  renderCompanyOutcomeChart(stats.outcome_distribution);
+  renderCompanyTrendChart(trends);
   document.getElementById("company-details").hidden = false;
   setSearchStatus(`Showing exact stats for ${stats.company}.`, "success");
 }
@@ -224,11 +303,11 @@ function bindCompanySearch() {
     const company = findCompanyByName(input.value);
     if (!company) {
       document.getElementById("company-details").hidden = true;
-      setSearchStatus("Company not found. Pick one of the tracked company names from the suggestions.");
+      setSearchStatus("Company not found. Choose one of the tracked company names from the suggestions.");
       return;
     }
 
-    setSearchStatus(`Loading stats for ${company.name}...`);
+    setSearchStatus(`Loading exact stats for ${company.name}...`);
     try {
       await loadCompanyDetails(company);
     } catch (error) {
@@ -245,23 +324,24 @@ async function initDashboard() {
       fetchJson("/api/stats/trends"),
       fetchJson("/api/companies"),
     ]);
+
     companies = companyList;
     renderMetrics(stats);
-    renderTopCompanies(stats.top_companies);
-    renderDistribution("stage-distribution", stats.stage_distribution);
-    renderDistribution("outcome-distribution", stats.outcome_distribution);
-    renderTrends(trends);
+    renderTopCompaniesChart(stats.top_companies);
+    renderGlobalStageChart(stats.stage_distribution);
+    renderGlobalOutcomeChart(stats.outcome_distribution);
+    renderGlobalTrendChart(trends);
     renderCompanyOptions(companyList);
     bindCompanySearch();
+
     if (companyList.length) {
       document.getElementById("company-search-input").value = companyList[0].name;
       await loadCompanyDetails(companyList[0]);
     } else {
-      setSearchStatus("No companies tracked yet. Log a few `!process` commands to populate search.");
+      setSearchStatus("No companies tracked yet. Run `/process` in Discord to populate the dashboard.");
     }
   } catch (error) {
-    const panel = document.getElementById("metric-cards");
-    panel.innerHTML = `<article class="metric-card"><div class="metric-label">Dashboard</div><div>Unable to load data yet.</div></article>`;
+    document.getElementById("metric-cards").innerHTML = metricCard("Dashboard", "Unable to load");
     setSearchStatus("Dashboard data could not be loaded.");
   }
 }
