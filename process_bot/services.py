@@ -13,6 +13,22 @@ from process_bot.normalization import (
     slugify_company_name,
 )
 
+EMPLOYMENT_TYPE_ALIASES = {
+    "intern": "intern",
+    "internship": "intern",
+    "fulltime": "full_time",
+    "full-time": "full_time",
+    "full_time": "full_time",
+    "ft": "full_time",
+}
+
+
+def normalize_employment_type(raw_employment_type: str | None) -> str | None:
+    if not raw_employment_type:
+        return None
+    key = raw_employment_type.strip().lower().replace(" ", "").replace("_", "-")
+    return EMPLOYMENT_TYPE_ALIASES.get(key)
+
 
 def get_or_create_user(session: Session, discord_user_id: str, username: str) -> models.User:
     user = session.scalar(select(models.User).where(models.User.discord_user_id == discord_user_id))
@@ -80,6 +96,9 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
         raise ValueError(f"Unsupported stage: {payload.stage}")
 
     outcome = normalize_outcome(payload.outcome) if payload.outcome else None
+    employment_type = normalize_employment_type(payload.employment_type)
+    if payload.employment_type and not employment_type:
+        raise ValueError(f"Unsupported employment type: {payload.employment_type}")
     company = get_or_create_company(session, payload.company)
     user = get_or_create_user(session, discord_user_id=payload.discord_user_id, username=payload.username)
     occurred_at = payload.occurred_at or datetime.utcnow()
@@ -95,6 +114,7 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
         company_id=company.id,
         stage=stage,
         outcome=outcome,
+        employment_type=employment_type,
         notes=payload.notes,
         recruiting_season=infer_recruiting_season(occurred_at),
         discord_message_id=payload.discord_message_id,
@@ -148,6 +168,14 @@ def update_process_event(session: Session, event_id: int, payload: schemas.Proce
             if not outcome:
                 raise ValueError(f"Unsupported outcome: {payload.outcome}")
             event.outcome = outcome
+    if payload.employment_type is not None:
+        if payload.employment_type == "":
+            event.employment_type = None
+        else:
+            employment_type = normalize_employment_type(payload.employment_type)
+            if not employment_type:
+                raise ValueError(f"Unsupported employment type: {payload.employment_type}")
+            event.employment_type = employment_type
     if payload.notes is not None:
         event.notes = payload.notes
     session.flush()
@@ -171,6 +199,7 @@ def serialize_process_event(event: models.ProcessEvent) -> schemas.ProcessEventR
         company_slug=event.company.slug,
         stage=event.stage,
         outcome=event.outcome,
+        employment_type=event.employment_type,
         recruiting_season=event.recruiting_season,
         notes=event.notes,
         occurred_at=event.occurred_at,

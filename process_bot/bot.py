@@ -15,11 +15,17 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 STAGE_CHOICES = [
+    app_commands.Choice(name="OA", value="oa"),
     app_commands.Choice(name="Behavorial", value="behavioral"),
     app_commands.Choice(name="Onsite", value="onsite"),
     app_commands.Choice(name="Offer", value="offer"),
     app_commands.Choice(name="Reject", value="reject"),
 ]
+EMPLOYMENT_TYPE_CHOICES = [
+    app_commands.Choice(name="Intern", value="intern"),
+    app_commands.Choice(name="Full Time", value="full_time"),
+]
+
 
 def format_distribution(distribution: dict[str, int]) -> str:
     if not distribution:
@@ -28,9 +34,27 @@ def format_distribution(distribution: dict[str, int]) -> str:
     return "\n".join(f"• {label.title()}: {count}" for label, count in ordered.items())
 
 
+def humanize_employment_type(employment_type: str) -> str:
+    return employment_type.replace("_", " ").title()
+
+
 def channel_allowed(channel_id: int) -> bool:
     allowed_channels = settings.allowed_channel_ids
     return not allowed_channels or channel_id in allowed_channels
+
+
+async def company_name_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    del interaction
+    with SessionLocal() as session:
+        companies = services.list_companies(session)
+
+    current_lower = current.strip().lower()
+    if current_lower:
+        companies = [company for company in companies if current_lower in company.name.lower()]
+    return [app_commands.Choice(name=company.name[:100], value=company.name) for company in companies[:25]]
 
 
 def build_bot() -> commands.Bot:
@@ -54,12 +78,14 @@ def build_bot() -> commands.Bot:
         logger.info("Logged in as %s", bot.user)
 
     @bot.tree.command(name="process", description="Log a recruiting process update")
-    @app_commands.describe(company="Company name", stage="Recruiting stage")
-    @app_commands.choices(stage=STAGE_CHOICES)
+    @app_commands.describe(company="Company name", stage="Recruiting stage", employment_type="Intern or full time")
+    @app_commands.choices(stage=STAGE_CHOICES, employment_type=EMPLOYMENT_TYPE_CHOICES)
+    @app_commands.autocomplete(company=company_name_autocomplete)
     async def process(
         interaction: discord.Interaction,
         company: str,
         stage: app_commands.Choice[str],
+        employment_type: app_commands.Choice[str],
     ) -> None:
         if not interaction.channel or not channel_allowed(interaction.channel.id):
             await interaction.response.send_message(
@@ -84,9 +110,12 @@ def build_bot() -> commands.Bot:
                 company=company,
                 stage=stored_stage,
                 outcome=stored_outcome,
+                employment_type=employment_type.value,
                 discord_message_id=f"interaction:{interaction.id}",
                 channel_id=str(interaction.channel.id),
-                source_command=f"/process company={company} stage={stage.value}",
+                source_command=(
+                    f"/process company={company} stage={stage.value} employment_type={employment_type.value}"
+                ),
             )
             try:
                 event = services.create_process_event(session, payload)
@@ -102,6 +131,7 @@ def build_bot() -> commands.Bot:
             color=discord.Color.brand_green(),
             description=f"Recorded **{event_response.company}** at **{stage.name}**.",
         )
+        embed.add_field(name="Track", value=employment_type.name, inline=True)
         if event_response.outcome:
             embed.add_field(name="Recorded as", value=event_response.outcome.title(), inline=True)
         if event_response.recruiting_season:
@@ -122,6 +152,7 @@ def build_bot() -> commands.Bot:
 
         lines = [
             f"`#{event.id}` {event.company} • {event.stage.title()}"
+            + (f" • {humanize_employment_type(event.employment_type)}" if event.employment_type else "")
             + (f" • {event.outcome.title()}" if event.outcome else "")
             for event in events
         ]
@@ -148,6 +179,7 @@ def build_bot() -> commands.Bot:
 
     @bot.tree.command(name="stats", description="View recruiting stats for a company")
     @app_commands.describe(company="Exact tracked company name")
+    @app_commands.autocomplete(company=company_name_autocomplete)
     async def stats(interaction: discord.Interaction, company: str) -> None:
         with SessionLocal() as session:
             company_record = services.find_company(session, company)

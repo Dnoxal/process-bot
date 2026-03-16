@@ -50,6 +50,7 @@ class ProcessEvent(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
     stage: Mapped[str] = mapped_column(String(64), index=True)
     outcome: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    employment_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     recruiting_season: Mapped[str | None] = mapped_column(String(64), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_command: Mapped[str | None] = mapped_column(Text, nullable=True)

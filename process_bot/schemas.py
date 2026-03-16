@@ -18,6 +18,7 @@ class ProcessEventCreate(BaseModel):
     company: str
     stage: str
     outcome: str | None = None
+    employment_type: str | None = None
     notes: str | None = None
     discord_message_id: str
     channel_id: str
@@ -28,6 +29,7 @@ class ProcessEventCreate(BaseModel):
 class ProcessEventUpdate(BaseModel):
     stage: str | None = None
     outcome: str | None = None
+    employment_type: str | None = None
     notes: str | None = None
 
 
@@ -47,6 +49,7 @@ class ProcessEventResponse(BaseModel):
     company_slug: str
     stage: str
     outcome: str | None
+    employment_type: str | None
     recruiting_season: str | None
     notes: str | None
     occurred_at: datetime
