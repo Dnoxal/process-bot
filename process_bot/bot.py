@@ -43,6 +43,33 @@ def channel_allowed(channel_id: int) -> bool:
     return not allowed_channels or channel_id in allowed_channels
 
 
+def build_process_logged_embed(
+    *,
+    company_name: str,
+    stage_name: str,
+    employment_type_name: str,
+    outcome: str | None,
+    recruiting_season: str | None,
+    alias_note: str | None = None,
+) -> discord.Embed:
+    description = f"Recorded **{company_name}** at **{stage_name}**."
+    if alias_note:
+        description = f"{description}\n{alias_note}"
+
+    embed = discord.Embed(
+        title="Process logged",
+        color=discord.Color.brand_green(),
+        description=description,
+    )
+    embed.add_field(name="Track", value=employment_type_name, inline=True)
+    if outcome:
+        embed.add_field(name="Recorded as", value=outcome.title(), inline=True)
+    if recruiting_season:
+        embed.add_field(name="Season", value=recruiting_season, inline=True)
+    embed.set_footer(text="Saved privately for analytics and your history.")
+    return embed
+
+
 async def company_name_autocomplete(
     interaction: discord.Interaction,
     current: str,
@@ -55,6 +82,99 @@ async def company_name_autocomplete(
     if current_lower:
         companies = [company for company in companies if current_lower in company.name.lower()]
     return [app_commands.Choice(name=company.name[:100], value=company.name) for company in companies[:25]]
+
+
+class AliasConfirmationView(discord.ui.View):
+    def __init__(
+        self,
+        *,
+        user_id: int,
+        original_company: str,
+        canonical_company: str,
+        alias_slug: str,
+        stage_value: str,
+        stage_name: str,
+        employment_type_value: str,
+        employment_type_name: str,
+        channel_id: int,
+        command_user_display: str,
+    ) -> None:
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.original_company = original_company
+        self.canonical_company = canonical_company
+        self.alias_slug = alias_slug
+        self.stage_value = stage_value
+        self.stage_name = stage_name
+        self.employment_type_value = employment_type_value
+        self.employment_type_name = employment_type_name
+        self.channel_id = channel_id
+        self.command_user_display = command_user_display
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Only the user who ran `/process` can use these buttons.", ephemeral=True)
+            return False
+        return True
+
+    async def _save_event(
+        self,
+        interaction: discord.Interaction,
+        *,
+        company_name: str,
+        add_alias: bool,
+    ) -> None:
+        alias_note: str | None = None
+        with SessionLocal() as session:
+            if add_alias:
+                canonical_company = services.get_or_create_company(session, self.canonical_company)
+                services.create_company_alias(session, canonical_company.slug, self.alias_slug)
+                alias_note = f"Added alias **{self.alias_slug}** for **{canonical_company.name}**."
+
+            payload = schemas.ProcessEventCreate(
+                discord_user_id=str(interaction.user.id),
+                username=self.command_user_display,
+                company=company_name,
+                stage=self.stage_value,
+                outcome=None,
+                employment_type=self.employment_type_value,
+                discord_message_id=f"interaction:{interaction.id}",
+                channel_id=str(self.channel_id),
+                source_command=(
+                    f"/process company={self.original_company} "
+                    f"stage={self.stage_value} employment_type={self.employment_type_value}"
+                ),
+            )
+            try:
+                event = services.create_process_event(session, payload)
+            except ValueError as exc:
+                session.rollback()
+                await interaction.response.edit_message(content=str(exc), embed=None, view=None)
+                return
+
+            session.commit()
+            event_response = services.serialize_process_event(event)
+
+        embed = build_process_logged_embed(
+            company_name=event_response.company,
+            stage_name=self.stage_name,
+            employment_type_name=self.employment_type_name,
+            outcome=event_response.outcome,
+            recruiting_season=event_response.recruiting_season,
+            alias_note=alias_note,
+        )
+        await interaction.response.edit_message(content=None, embed=embed, view=None)
+
+    @discord.ui.button(label="Use suggested company", style=discord.ButtonStyle.success, emoji="✅")
+    async def use_suggestion(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        del button
+        await self._save_event(interaction, company_name=self.canonical_company, add_alias=True)
+
+    @discord.ui.button(label="Keep as typed", style=discord.ButtonStyle.danger, emoji="❌")
+    async def keep_typed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        del button
+        await self._save_event(interaction, company_name=self.original_company, add_alias=False)
+
 
 
 def build_bot() -> commands.Bot:
@@ -104,6 +224,38 @@ def build_bot() -> commands.Bot:
             stored_outcome = "rejected"
 
         with SessionLocal() as session:
+            try:
+                suggestion = services.suggest_company_from_alias(session, company)
+            except ValueError as exc:
+                await interaction.response.send_message(str(exc), ephemeral=True)
+                return
+
+        if suggestion:
+            prompt_embed = discord.Embed(
+                title=f"Did you mean {suggestion.canonical_name}?",
+                color=discord.Color.gold(),
+                description=(
+                    f"You entered **{company}**.\n"
+                    "If yes, I will log this under the suggested company and save this abbreviation as an alias."
+                ),
+            )
+            prompt_embed.set_footer(text="Only you can see and interact with this message.")
+            view = AliasConfirmationView(
+                user_id=interaction.user.id,
+                original_company=company,
+                canonical_company=suggestion.canonical_name,
+                alias_slug=suggestion.alias,
+                stage_value=stored_stage,
+                stage_name=stage.name,
+                employment_type_value=employment_type.value,
+                employment_type_name=employment_type.name,
+                channel_id=interaction.channel.id,
+                command_user_display=str(interaction.user),
+            )
+            await interaction.response.send_message(embed=prompt_embed, view=view, ephemeral=True)
+            return
+
+        with SessionLocal() as session:
             payload = schemas.ProcessEventCreate(
                 discord_user_id=str(interaction.user.id),
                 username=str(interaction.user),
@@ -126,17 +278,13 @@ def build_bot() -> commands.Bot:
             session.commit()
             event_response = services.serialize_process_event(event)
 
-        embed = discord.Embed(
-            title="Process logged",
-            color=discord.Color.brand_green(),
-            description=f"Recorded **{event_response.company}** at **{stage.name}**.",
+        embed = build_process_logged_embed(
+            company_name=event_response.company,
+            stage_name=stage.name,
+            employment_type_name=employment_type.name,
+            outcome=event_response.outcome,
+            recruiting_season=event_response.recruiting_season,
         )
-        embed.add_field(name="Track", value=employment_type.name, inline=True)
-        if event_response.outcome:
-            embed.add_field(name="Recorded as", value=event_response.outcome.title(), inline=True)
-        if event_response.recruiting_season:
-            embed.add_field(name="Season", value=event_response.recruiting_season, inline=True)
-        embed.set_footer(text="Saved privately for analytics and your history.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @bot.tree.command(name="myprocesses", description="View your most recent logged process updates")

@@ -1,4 +1,5 @@
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -21,6 +22,37 @@ EMPLOYMENT_TYPE_ALIASES = {
     "full_time": "full_time",
     "ft": "full_time",
 }
+
+KNOWN_COMPANY_ABBREVIATIONS = {
+    "amzn": "Amazon",
+    "appl": "Apple",
+    "bofa": "Bank of America",
+    "c1": "Capital One",
+    "coin": "Coinbase",
+    "fb": "Meta",
+    "g": "Google",
+    "ggl": "Google",
+    "goog": "Google",
+    "ibm": "IBM",
+    "jpm": "JPMorgan",
+    "ma": "Meta",
+    "meta": "Meta",
+    "ms": "Morgan Stanley",
+    "msft": "Microsoft",
+    "nflx": "Netflix",
+    "nvda": "NVIDIA",
+    "pal": "PayPal",
+    "sbux": "Starbucks",
+    "tsla": "Tesla",
+    "uber": "Uber",
+    "zon": "Amazon",
+}
+
+
+@dataclass(frozen=True)
+class CompanyAliasSuggestion:
+    alias: str
+    canonical_name: str
 
 
 def normalize_employment_type(raw_employment_type: str | None) -> str | None:
@@ -72,6 +104,27 @@ def find_company(session: Session, company_name: str) -> models.Company | None:
         select(models.CompanyAlias).options(joinedload(models.CompanyAlias.company)).where(models.CompanyAlias.alias == slug)
     )
     return alias_match.company if alias_match else None
+
+
+def suggest_company_from_alias(session: Session, company_name: str) -> CompanyAliasSuggestion | None:
+    normalized_name = normalize_company_name(company_name)
+    alias_slug = slugify_company_name(normalized_name)
+
+    canonical_name = KNOWN_COMPANY_ABBREVIATIONS.get(alias_slug)
+    if not canonical_name:
+        return None
+
+    canonical_slug = slugify_company_name(canonical_name)
+    if alias_slug == canonical_slug:
+        return None
+
+    # If the input already resolves to a canonical company via an alias entry,
+    # there is no need to prompt again.
+    existing_match = find_company(session, company_name)
+    if existing_match and existing_match.slug != alias_slug:
+        return None
+
+    return CompanyAliasSuggestion(alias=alias_slug, canonical_name=canonical_name)
 
 
 def create_company_alias(session: Session, company_slug: str, alias: str) -> models.CompanyAlias:
