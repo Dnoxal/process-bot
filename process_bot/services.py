@@ -1,6 +1,6 @@
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -138,7 +138,7 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
         raise ValueError(f"Unsupported employment type: {payload.employment_type}")
     company = get_or_create_company(session, payload.company)
     user = get_or_create_user(session, discord_user_id=payload.discord_user_id, username=payload.username)
-    occurred_at = payload.occurred_at or datetime.utcnow()
+    occurred_at = payload.occurred_at or datetime.now(UTC)
 
     existing = session.scalar(
         select(models.ProcessEvent).where(models.ProcessEvent.discord_message_id == payload.discord_message_id)
@@ -185,6 +185,12 @@ def list_all_process_events(session: Session) -> list[schemas.ProcessEventRespon
         select(models.ProcessEvent).join(models.Company).join(models.User).order_by(models.ProcessEvent.occurred_at.desc())
     ).all()
     return [serialize_process_event(event) for event in events]
+
+
+def _apply_employment_type_filter(query, employment_type: str) :
+    if employment_type != "all":
+        query = query.where(models.ProcessEvent.employment_type == employment_type)
+    return query
 
 
 def update_process_event(session: Session, event_id: int, payload: schemas.ProcessEventUpdate) -> models.ProcessEvent | None:
@@ -241,6 +247,110 @@ def serialize_process_event(event: models.ProcessEvent) -> schemas.ProcessEventR
         notes=event.notes,
         occurred_at=event.occurred_at,
         username=event.user.username,
+    )
+
+
+def dashboard_overview(session: Session, employment_type: str = "all") -> schemas.DashboardOverviewResponse:
+    events_query = select(models.ProcessEvent)
+    events_query = _apply_employment_type_filter(events_query, employment_type)
+    events = session.scalars(events_query).all()
+
+    total_events = len(events)
+    total_candidates = len({event.user_id for event in events})
+    total_companies = len({event.company_id for event in events})
+    offers = sum(1 for event in events if event.outcome == "offered")
+    stage_distribution = dict(Counter(event.stage for event in events))
+    outcome_distribution = dict(Counter(event.outcome for event in events if event.outcome))
+
+    all_employment_rows = session.scalars(select(models.ProcessEvent.employment_type)).all()
+    employment_distribution = dict(Counter(value for value in all_employment_rows if value))
+
+    top_company_rows = session.execute(
+        _apply_employment_type_filter(
+            select(models.Company.name, func.count(models.ProcessEvent.id))
+            .join(models.ProcessEvent)
+            .group_by(models.Company.id)
+            .order_by(func.count(models.ProcessEvent.id).desc(), models.Company.name.asc()),
+            employment_type,
+        ).limit(8)
+    ).all()
+
+    trend_rows = session.execute(
+        _apply_employment_type_filter(
+            select(func.date(models.ProcessEvent.occurred_at), func.count(models.ProcessEvent.id))
+            .group_by(func.date(models.ProcessEvent.occurred_at))
+            .order_by(func.date(models.ProcessEvent.occurred_at).asc()),
+            employment_type,
+        )
+    ).all()
+
+    return schemas.DashboardOverviewResponse(
+        total_events=total_events,
+        total_candidates=total_candidates,
+        total_companies=total_companies,
+        offers=offers,
+        stage_distribution=stage_distribution,
+        outcome_distribution=outcome_distribution,
+        employment_distribution=employment_distribution,
+        top_companies=[schemas.NamedCount(label=row[0], value=row[1]) for row in top_company_rows],
+        trend_points=[schemas.TrendPoint(period_start=str(row[0]), events=row[1]) for row in trend_rows],
+    )
+
+
+def dashboard_company(session: Session, company_slug: str, employment_type: str = "all") -> schemas.DashboardCompanyResponse | None:
+    company = session.scalar(select(models.Company).where(models.Company.slug == company_slug))
+    if not company:
+        return None
+
+    query = select(models.ProcessEvent).where(models.ProcessEvent.company_id == company.id)
+    query = _apply_employment_type_filter(query, employment_type)
+    events = session.scalars(query).all()
+    if not events:
+        return schemas.DashboardCompanyResponse(
+            company=company.name,
+            slug=company.slug,
+            employment_type=employment_type,
+            total_events=0,
+            total_candidates=0,
+            offers=0,
+            latest_activity=None,
+            stage_distribution={},
+            outcome_distribution={},
+            trend_points=[],
+            funnel_points=[],
+        )
+
+    stage_distribution = dict(Counter(event.stage for event in events))
+    outcome_distribution = dict(Counter(event.outcome for event in events if event.outcome))
+    trend_counts = Counter(str(event.occurred_at.date()) for event in events)
+    ordered_trends = sorted(trend_counts.items())
+
+    funnel_counts = [
+        ("OA", stage_distribution.get("oa", 0)),
+        ("Behavioral", stage_distribution.get("behavioral", 0)),
+        ("Technical", stage_distribution.get("technical", 0) + stage_distribution.get("onsite", 0)),
+        ("Offers", outcome_distribution.get("offered", 0)),
+        ("Rejections", outcome_distribution.get("rejected", 0)),
+    ]
+    funnel_base = next((value for _, value in funnel_counts if value > 0), 0)
+    funnel_points = [
+        schemas.FunnelPoint(label=label, value=round((value / funnel_base) * 100, 1))
+        for label, value in funnel_counts
+        if value > 0 and funnel_base
+    ]
+
+    return schemas.DashboardCompanyResponse(
+        company=company.name,
+        slug=company.slug,
+        employment_type=employment_type,
+        total_events=len(events),
+        total_candidates=len({event.user_id for event in events}),
+        offers=outcome_distribution.get("offered", 0),
+        latest_activity=max(event.occurred_at for event in events),
+        stage_distribution=stage_distribution,
+        outcome_distribution=outcome_distribution,
+        trend_points=[schemas.TrendPoint(period_start=label, events=value) for label, value in ordered_trends],
+        funnel_points=funnel_points,
     )
 
 

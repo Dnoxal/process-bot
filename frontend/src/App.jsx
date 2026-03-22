@@ -142,25 +142,10 @@ function filterEvents(events, track) {
   return events.filter((event) => event.employment_type === track);
 }
 
-function CompanyModal({ company, events, track, onClose }) {
-  const overview = useMemo(() => buildOverview(events), [events]);
-
-  const stageEntries = sortEntries(overview.stageCounts);
-  const outcomeEntries = sortEntries(overview.outcomeCounts);
-  const funnelCounts = [
-    { label: "OA", value: overview.stageCounts.oa || 0 },
-    { label: "Behavioral", value: overview.stageCounts.behavioral || 0 },
-    { label: "Technical", value: overview.stageCounts.technical || 0 },
-    { label: "Offers", value: overview.outcomeCounts.offered || 0 },
-    { label: "Rejections", value: overview.outcomeCounts.rejected || 0 },
-  ];
-  const funnelBase = funnelCounts.find((step) => step.value > 0)?.value || 0;
-  const funnelPercentages = funnelCounts
-    .filter((step) => step.value > 0)
-    .map((step) => ({
-      label: step.label,
-      percent: funnelBase ? Number(((step.value / funnelBase) * 100).toFixed(1)) : 0,
-    }));
+function CompanyModal({ company, track, onClose, data }) {
+  const stageEntries = sortEntries(data.stage_distribution || {});
+  const outcomeEntries = sortEntries(data.outcome_distribution || {});
+  const funnelPercentages = data.funnel_points || [];
 
   return (
     <div className="fixed inset-0 z-30">
@@ -177,9 +162,10 @@ function CompanyModal({ company, events, track, onClose }) {
 
         <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="Company" value={company.name} />
-          <Metric label="Events" value={overview.totalEvents} />
-          <Metric label="Candidates" value={overview.totalCandidates} />
-          <Metric label="Offers" value={overview.offers} />
+          <Metric label="Events" value={data.total_events} />
+          <Metric label="Candidates" value={data.total_candidates} />
+          <Metric label="Offers" value={data.offers} />
+          <Metric label="Latest" value={data.latest_activity ? new Date(data.latest_activity).toLocaleDateString() : "—"} />
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -188,11 +174,11 @@ function CompanyModal({ company, events, track, onClose }) {
               <Line
                 options={chartOptions({ legend: false, compact: true })}
                 data={{
-                  labels: overview.trendPoints.map((point) => point.date),
+                  labels: (data.trend_points || []).map((point) => point.period_start),
                   datasets: [
                     {
                       label: "Events",
-                      data: overview.trendPoints.map((point) => point.count),
+                      data: (data.trend_points || []).map((point) => point.events),
                       borderColor: palette.slate,
                       borderWidth: 2,
                       pointRadius: 0,
@@ -280,7 +266,7 @@ function CompanyModal({ company, events, track, onClose }) {
 }
 
 export default function App() {
-  const [events, setEvents] = useState([]);
+  const [overview, setOverview] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [track, setTrack] = useState("all");
   const [status, setStatus] = useState("Loading dashboard...");
@@ -290,45 +276,55 @@ export default function App() {
   useEffect(() => {
     async function load() {
       try {
-        const [eventData, companyData] = await Promise.all([
-          fetchJson("/api/admin/process-events"),
+        const [overviewData, companyData] = await Promise.all([
+          fetchJson(`/api/dashboard/overview?employment_type=${track}`),
           fetchJson("/api/companies"),
         ]);
-        setEvents(eventData);
+        setOverview(overviewData);
         setCompanies(companyData);
-        setStatus("Showing all activity. Search a company to open its popup.");
+        setStatus(`Showing ${humanize(track).toLowerCase()} activity. Search a company to open its popup.`);
       } catch (error) {
         setStatus("Dashboard data could not be loaded.");
       }
     }
     load();
-  }, []);
+  }, [track]);
 
-  const filteredEvents = useMemo(() => filterEvents(events, track), [events, track]);
-  const overview = useMemo(() => buildOverview(filteredEvents), [filteredEvents]);
-  const allTrackOverview = useMemo(() => buildOverview(events), [events]);
+  const stageEntries = useMemo(
+    () => sortEntries(overview?.stage_distribution || {}),
+    [overview]
+  );
+  const outcomeEntries = useMemo(
+    () => sortEntries(overview?.outcome_distribution || {}),
+    [overview]
+  );
+  const companyEntries = useMemo(
+    () => (overview?.top_companies || []).map((entry) => [entry.label, entry.value]),
+    [overview]
+  );
+  const employmentEntries = useMemo(
+    () => sortEntries(overview?.employment_distribution || {}),
+    [overview]
+  );
 
-  const stageEntries = sortEntries(overview.stageCounts);
-  const outcomeEntries = sortEntries(overview.outcomeCounts);
-  const companyEntries = sortEntries(overview.companyCounts).slice(0, 8);
-
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     const match = companies.find((company) => company.name.toLowerCase() === searchValue.trim().toLowerCase());
     if (!match) {
       setStatus("Company not found. Choose one of the tracked company names from the suggestions.");
       return;
     }
-    const companyEvents = filterEvents(
-      events.filter((item) => item.company_slug === match.slug),
-      track
-    );
-    if (!companyEvents.length) {
-      setStatus(`No ${humanize(track).toLowerCase()} data is available for ${match.name} yet.`);
-      return;
+    try {
+      const companyData = await fetchJson(`/api/dashboard/company/${match.slug}?employment_type=${track}`);
+      if (!companyData.total_events) {
+        setStatus(`No ${humanize(track).toLowerCase()} data is available for ${match.name} yet.`);
+        return;
+      }
+      setSelectedCompany(companyData);
+      setStatus(`Opened ${match.name} in ${humanize(track).toLowerCase()} view.`);
+    } catch (error) {
+      setStatus("Unable to load that company right now.");
     }
-    setSelectedCompany({ ...match, events: companyEvents });
-    setStatus(`Opened ${match.name} in ${humanize(track).toLowerCase()} view.`);
   }
 
   return (
@@ -349,7 +345,8 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     setTrack(item.id);
-                    setStatus(`Showing ${humanize(item.id).toLowerCase()} activity.`);
+                    setSelectedCompany(null);
+                    setStatus(`Loading ${humanize(item.id).toLowerCase()} activity...`);
                   }}
                   className={`rounded-full px-3 py-2 text-sm font-semibold transition ${track === item.id ? "bg-ink text-white" : "text-stone-500 hover:bg-black/[0.05] hover:text-ink"}`}
                 >
@@ -380,10 +377,10 @@ export default function App() {
         <p className="mb-3 min-h-5 text-sm text-stone-500">{status}</p>
 
         <section className="mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Events" value={overview.totalEvents} />
-          <Metric label="Candidates" value={overview.totalCandidates} />
-          <Metric label="Companies" value={overview.totalCompanies} />
-          <Metric label="Offers" value={overview.offers} />
+          <Metric label="Events" value={overview?.total_events ?? "—"} />
+          <Metric label="Candidates" value={overview?.total_candidates ?? "—"} />
+          <Metric label="Companies" value={overview?.total_companies ?? "—"} />
+          <Metric label="Offers" value={overview?.offers ?? "—"} />
         </section>
 
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -392,11 +389,11 @@ export default function App() {
               <Line
                 options={chartOptions({ legend: false, compact: true })}
                 data={{
-                  labels: overview.trendPoints.map((point) => point.date),
+                  labels: overview?.trend_points?.map((point) => point.period_start) || [],
                   datasets: [
                     {
                       label: "Events",
-                      data: overview.trendPoints.map((point) => point.count),
+                      data: overview?.trend_points?.map((point) => point.events) || [],
                       borderColor: palette.pine,
                       borderWidth: 2,
                       pointRadius: 0,
@@ -451,8 +448,8 @@ export default function App() {
               <Bar
                 options={chartOptions({ legend: false, compact: true })}
                 data={{
-                  labels: sortEntries(allTrackOverview.employmentCounts).map(([label]) => humanize(label)),
-                  datasets: [{ label: "Events", data: sortEntries(allTrackOverview.employmentCounts).map(([, count]) => count), backgroundColor: palette.slate, borderRadius: 8, maxBarThickness: 24 }],
+                  labels: employmentEntries.map(([label]) => humanize(label)),
+                  datasets: [{ label: "Events", data: employmentEntries.map(([, count]) => count), backgroundColor: palette.slate, borderRadius: 8, maxBarThickness: 24 }],
                 }}
               />
             </div>
@@ -462,10 +459,11 @@ export default function App() {
 
       {selectedCompany ? (
         <CompanyModal
-          company={selectedCompany}
-          events={selectedCompany.events}
+          company={{ name: selectedCompany.company }}
+          events={[]}
           track={track}
           onClose={() => setSelectedCompany(null)}
+          data={selectedCompany}
         />
       ) : null}
     </>

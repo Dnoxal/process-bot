@@ -84,6 +84,26 @@ def get_trends(
     return services.event_trends(db, company_slug=company_slug)
 
 
+@app.get("/api/dashboard/overview", response_model=schemas.DashboardOverviewResponse)
+def get_dashboard_overview(
+    employment_type: str = Query(default="all"),
+    db: Session = Depends(get_db),
+) -> schemas.DashboardOverviewResponse:
+    return services.dashboard_overview(db, employment_type=employment_type)
+
+
+@app.get("/api/dashboard/company/{company_slug}", response_model=schemas.DashboardCompanyResponse)
+def get_dashboard_company(
+    company_slug: str,
+    employment_type: str = Query(default="all"),
+    db: Session = Depends(get_db),
+) -> schemas.DashboardCompanyResponse:
+    result = services.dashboard_company(db, company_slug=company_slug, employment_type=employment_type)
+    if not result:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return result
+
+
 @app.get("/api/me/processes", response_model=list[schemas.ProcessEventResponse])
 def get_my_processes(
     discord_user_id: str = Query(..., min_length=1),

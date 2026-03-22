@@ -78,3 +78,39 @@ class CompanyStatsResponse(BaseModel):
 class TrendPoint(BaseModel):
     period_start: str
     events: int
+
+
+class NamedCount(BaseModel):
+    label: str
+    value: int
+
+
+class FunnelPoint(BaseModel):
+    label: str
+    value: float
+
+
+class DashboardOverviewResponse(BaseModel):
+    total_events: int
+    total_candidates: int
+    total_companies: int
+    offers: int
+    stage_distribution: dict[str, int]
+    outcome_distribution: dict[str, int]
+    employment_distribution: dict[str, int]
+    top_companies: list[NamedCount]
+    trend_points: list[TrendPoint]
+
+
+class DashboardCompanyResponse(BaseModel):
+    company: str
+    slug: str
+    employment_type: str
+    total_events: int
+    total_candidates: int
+    offers: int
+    latest_activity: datetime | None
+    stage_distribution: dict[str, int]
+    outcome_distribution: dict[str, int]
+    trend_points: list[TrendPoint]
+    funnel_points: list[FunnelPoint]
