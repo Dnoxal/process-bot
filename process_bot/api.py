@@ -1,9 +1,9 @@
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from process_bot.database import get_db, init_db
@@ -11,10 +11,13 @@ from process_bot import schemas, services
 
 
 BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+FRONTEND_BUILD_DIR = BASE_DIR / "static" / "app"
+FRONTEND_ASSETS_DIR = FRONTEND_BUILD_DIR / "assets"
 
 app = FastAPI(title="Process Tracker API", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+if FRONTEND_ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_ASSETS_DIR)), name="assets")
 
 
 @app.on_event("startup")
@@ -22,9 +25,15 @@ def startup() -> None:
     init_db()
 
 
-@app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("index.html", {"request": request})
+@app.get("/", response_class=HTMLResponse, response_model=None)
+def dashboard(request: Request):
+    del request
+    index_file = FRONTEND_BUILD_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return HTMLResponse(
+        "<html><body><p>Frontend build not found. Run <code>npm install</code> then <code>npm run build</code>.</p></body></html>"
+    )
 
 
 @app.get("/api/health")

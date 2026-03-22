@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-mist text-ink antialiased;
+  background-image:
+    radial-gradient(circle at top left, rgba(26, 93, 82, 0.08), transparent 24%),
+    linear-gradient(180deg, #fbfaf7 0%, #f5f4ef 100%);
+}
+
+#root {
+  @apply min-h-screen;
+}

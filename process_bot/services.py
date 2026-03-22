@@ -25,26 +25,16 @@ EMPLOYMENT_TYPE_ALIASES = {
 
 KNOWN_COMPANY_ABBREVIATIONS = {
     "amzn": "Amazon",
+    "amazonn": "Amazon",
     "appl": "Apple",
-    "bofa": "Bank of America",
-    "c1": "Capital One",
-    "coin": "Coinbase",
     "fb": "Meta",
-    "g": "Google",
     "ggl": "Google",
     "goog": "Google",
-    "ibm": "IBM",
-    "jpm": "JPMorgan",
-    "ma": "Meta",
-    "meta": "Meta",
-    "ms": "Morgan Stanley",
     "msft": "Microsoft",
     "nflx": "Netflix",
-    "nvda": "NVIDIA",
-    "pal": "PayPal",
-    "sbux": "Starbucks",
-    "tsla": "Tesla",
-    "uber": "Uber",
+    "pin": "Pinterest",
+    "pins": "Pinterest",
+    "pint": "Pinterest",
     "zon": "Amazon",
 }
 
@@ -116,12 +106,6 @@ def suggest_company_from_alias(session: Session, company_name: str) -> CompanyAl
 
     canonical_slug = slugify_company_name(canonical_name)
     if alias_slug == canonical_slug:
-        return None
-
-    # If the input already resolves to a canonical company via an alias entry,
-    # there is no need to prompt again.
-    existing_match = find_company(session, company_name)
-    if existing_match and existing_match.slug != alias_slug:
         return None
 
     return CompanyAliasSuggestion(alias=alias_slug, canonical_name=canonical_name)

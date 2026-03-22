@@ -16,8 +16,8 @@ settings = get_settings()
 
 STAGE_CHOICES = [
     app_commands.Choice(name="OA", value="oa"),
-    app_commands.Choice(name="Behavorial", value="behavioral"),
-    app_commands.Choice(name="Onsite", value="onsite"),
+    app_commands.Choice(name="Behavioral", value="behavioral"),
+    app_commands.Choice(name="Technical", value="technical"),
     app_commands.Choice(name="Offer", value="offer"),
     app_commands.Choice(name="Reject", value="reject"),
 ]
@@ -122,15 +122,8 @@ class AliasConfirmationView(discord.ui.View):
         interaction: discord.Interaction,
         *,
         company_name: str,
-        add_alias: bool,
     ) -> None:
-        alias_note: str | None = None
         with SessionLocal() as session:
-            if add_alias:
-                canonical_company = services.get_or_create_company(session, self.canonical_company)
-                services.create_company_alias(session, canonical_company.slug, self.alias_slug)
-                alias_note = f"Added alias **{self.alias_slug}** for **{canonical_company.name}**."
-
             payload = schemas.ProcessEventCreate(
                 discord_user_id=str(interaction.user.id),
                 username=self.command_user_display,
@@ -161,19 +154,69 @@ class AliasConfirmationView(discord.ui.View):
             employment_type_name=self.employment_type_name,
             outcome=event_response.outcome,
             recruiting_season=event_response.recruiting_season,
-            alias_note=alias_note,
         )
         await interaction.response.edit_message(content=None, embed=embed, view=None)
 
-    @discord.ui.button(label="Use suggested company", style=discord.ButtonStyle.success, emoji="✅")
+    @discord.ui.button(label="Yes, use suggestion", style=discord.ButtonStyle.success, emoji="✅")
     async def use_suggestion(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         del button
-        await self._save_event(interaction, company_name=self.canonical_company, add_alias=True)
+        await self._save_event(interaction, company_name=self.canonical_company)
 
-    @discord.ui.button(label="Keep as typed", style=discord.ButtonStyle.danger, emoji="❌")
+    @discord.ui.button(label="No, keep typed", style=discord.ButtonStyle.secondary, emoji="✏️")
     async def keep_typed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         del button
-        await self._save_event(interaction, company_name=self.original_company, add_alias=False)
+        await self._save_event(interaction, company_name=self.original_company)
+
+
+class StatsAliasConfirmationView(discord.ui.View):
+    def __init__(self, *, user_id: int, original_company: str, canonical_company: str) -> None:
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.original_company = original_company
+        self.canonical_company = canonical_company
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Only the user who ran `/stats` can use these buttons.", ephemeral=True)
+            return False
+        return True
+
+    async def _show_stats(self, interaction: discord.Interaction, company_name: str) -> None:
+        with SessionLocal() as session:
+            company_record = services.find_company(session, company_name)
+            stats_result = services.company_stats(session, company_record.slug) if company_record else None
+        if not stats_result or not stats_result.total_events:
+            await interaction.response.edit_message(content=f"No stats yet for {company_name}.", embed=None, view=None)
+            return
+
+        embed = discord.Embed(
+            title=f"{stats_result.company} Recruiting Stats",
+            color=discord.Color.brand_green(),
+            description=(
+                f"Tracked events: **{stats_result.total_events}**\n"
+                f"Unique candidates: **{stats_result.total_candidates}**"
+            ),
+        )
+        if stats_result.latest_activity:
+            embed.add_field(
+                name="Latest activity",
+                value=stats_result.latest_activity.strftime("%b %d, %Y"),
+                inline=True,
+            )
+        embed.add_field(name="Stages", value=format_distribution(stats_result.stage_distribution), inline=False)
+        embed.add_field(name="Outcomes", value=format_distribution(stats_result.outcome_distribution), inline=False)
+        embed.set_footer(text="Use the web dashboard for full graphs and trend history.")
+        await interaction.response.edit_message(content=None, embed=embed, view=None)
+
+    @discord.ui.button(label="Yes, use suggestion", style=discord.ButtonStyle.success, emoji="✅")
+    async def use_suggestion(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        del button
+        await self._show_stats(interaction, self.canonical_company)
+
+    @discord.ui.button(label="No, keep typed", style=discord.ButtonStyle.secondary, emoji="✏️")
+    async def keep_typed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        del button
+        await self._show_stats(interaction, self.original_company)
 
 
 
@@ -236,7 +279,7 @@ def build_bot() -> commands.Bot:
                 color=discord.Color.gold(),
                 description=(
                     f"You entered **{company}**.\n"
-                    "If yes, I will log this under the suggested company and save this abbreviation as an alias."
+                    "If yes, I will log this under the suggested company. If not, I will keep the company exactly as typed."
                 ),
             )
             prompt_embed.set_footer(text="Only you can see and interact with this message.")
@@ -330,8 +373,26 @@ def build_bot() -> commands.Bot:
     @app_commands.autocomplete(company=company_name_autocomplete)
     async def stats(interaction: discord.Interaction, company: str) -> None:
         with SessionLocal() as session:
+            suggestion = services.suggest_company_from_alias(session, company)
             company_record = services.find_company(session, company)
             stats_result = services.company_stats(session, company_record.slug) if company_record else None
+        if suggestion:
+            prompt_embed = discord.Embed(
+                title=f"Did you mean {suggestion.canonical_name}?",
+                color=discord.Color.gold(),
+                description=(
+                    f"You entered **{company}**.\n"
+                    "If yes, I will show stats for the suggested company. If not, I will keep the name exactly as typed."
+                ),
+            )
+            prompt_embed.set_footer(text="Only you can see and interact with this message.")
+            view = StatsAliasConfirmationView(
+                user_id=interaction.user.id,
+                original_company=company,
+                canonical_company=suggestion.canonical_name,
+            )
+            await interaction.response.send_message(embed=prompt_embed, view=view, ephemeral=True)
+            return
         if not stats_result or not stats_result.total_events:
             await interaction.response.send_message(f"No stats yet for {company}.", ephemeral=True)
             return
