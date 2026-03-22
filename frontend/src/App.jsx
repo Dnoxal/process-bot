@@ -245,7 +245,7 @@ function CompanyModal({ company, track, onClose, data }) {
                   datasets: [
                     {
                       label: "Progression",
-                      data: funnelPercentages.length ? funnelPercentages.map((step) => step.percent) : [0],
+                      data: funnelPercentages.length ? funnelPercentages.map((step) => step.value) : [0],
                       borderColor: palette.pine,
                       borderWidth: 2.5,
                       pointRadius: 4,

@@ -1,6 +1,6 @@
 from collections import Counter
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -138,7 +138,7 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
         raise ValueError(f"Unsupported employment type: {payload.employment_type}")
     company = get_or_create_company(session, payload.company)
     user = get_or_create_user(session, discord_user_id=payload.discord_user_id, username=payload.username)
-    occurred_at = payload.occurred_at or datetime.now(UTC)
+    occurred_at = payload.occurred_at or datetime.now(timezone.utc)
 
     existing = session.scalar(
         select(models.ProcessEvent).where(models.ProcessEvent.discord_message_id == payload.discord_message_id)

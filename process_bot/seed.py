@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 
 from sqlalchemy import select
@@ -138,7 +138,7 @@ def generate_synthetic_events(user_count: int = 1400) -> list[tuple[str, str, st
 def seed_mock_data() -> int:
     init_db()
     inserted = 0
-    base_time = datetime.now(UTC)
+    base_time = datetime.now(timezone.utc)
     generated_events = SMALL_SEED_EVENTS + generate_synthetic_events()
 
     with SessionLocal() as session:
