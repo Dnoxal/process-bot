@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic import Field
@@ -30,6 +31,14 @@ class Settings(BaseSettings):
     def empty_string_to_none(cls, value: object) -> object:
         if value == "":
             return None
+        return value
+
+    @field_validator("api_port", mode="before")
+    @classmethod
+    def prefer_render_port(cls, value: object) -> object:
+        render_port = os.environ.get("PORT")
+        if render_port:
+            return render_port
         return value
 
     @property
