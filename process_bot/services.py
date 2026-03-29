@@ -27,14 +27,29 @@ KNOWN_COMPANY_ABBREVIATIONS = {
     "amzn": "Amazon",
     "amazonn": "Amazon",
     "appl": "Apple",
+    "c1": "Capital One",
     "fb": "Meta",
     "ggl": "Google",
     "goog": "Google",
+    "gs": "Goldman Sachs",
+    "hrt": "Hudson River Trading",
+    "insta": "Instacart",
+    "js": "Jane Street",
+    "jpm": "JP Morgan",
+    "jpmc": "JP Morgan",
+    "jp": "JP Morgan",
+    "lhm": "Lockheed Martin",
+    "meta": "Meta",
     "msft": "Microsoft",
     "nflx": "Netflix",
+    "oai": "OpenAI",
     "pin": "Pinterest",
     "pins": "Pinterest",
     "pint": "Pinterest",
+    "rf": "Robinhood",
+    "sig": "Susquehanna International Group",
+    "tt": "TikTok",
+    "wf": "Wells Fargo",
     "zon": "Amazon",
 }
 
@@ -99,6 +114,10 @@ def find_company(session: Session, company_name: str) -> models.Company | None:
 def suggest_company_from_alias(session: Session, company_name: str) -> CompanyAliasSuggestion | None:
     normalized_name = normalize_company_name(company_name)
     alias_slug = slugify_company_name(normalized_name)
+
+    existing_alias = session.scalar(select(models.CompanyAlias).where(models.CompanyAlias.alias == alias_slug))
+    if existing_alias:
+        return None
 
     canonical_name = KNOWN_COMPANY_ABBREVIATIONS.get(alias_slug)
     if not canonical_name:

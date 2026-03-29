@@ -44,3 +44,25 @@ def test_known_alias_still_prompts_when_alias_was_saved_as_company_name() -> Non
     assert suggestion is not None
     assert suggestion.alias == "zon"
     assert suggestion.canonical_name == "Amazon"
+
+
+def test_popular_abbreviations_return_expected_companies() -> None:
+    expected = {
+        "hrt": "Hudson River Trading",
+        "oai": "OpenAI",
+        "c1": "Capital One",
+        "jp": "JP Morgan",
+        "jpmc": "JP Morgan",
+        "jpm": "JP Morgan",
+        "lhm": "Lockheed Martin",
+        "wf": "Wells Fargo",
+        "js": "Jane Street",
+        "sig": "Susquehanna International Group",
+    }
+
+    with build_session() as session:
+        for alias, canonical_name in expected.items():
+            suggestion = services.suggest_company_from_alias(session, alias)
+            assert suggestion is not None
+            assert suggestion.alias == alias
+            assert suggestion.canonical_name == canonical_name
