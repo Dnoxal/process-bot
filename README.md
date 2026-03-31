@@ -1,6 +1,8 @@
-# Process Bot MVP
+# CSCD Process Bot
 
-Private Discord recruiting tracker for logging process updates and viewing lightweight analytics.
+Private Discord recruiting tracker for logging process updates and viewing lightweight analytics. 
+
+Bot for the largest computer science recruiting discord server.
 
 ## What it does
 
