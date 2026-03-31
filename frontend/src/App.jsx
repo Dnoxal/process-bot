@@ -71,6 +71,15 @@ function Metric({ label, value }) {
   );
 }
 
+function FunnelStagePill({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-pine/10 bg-[#f4f7f3] px-3 py-2">
+      <p className="text-[0.62rem] font-bold uppercase tracking-[0.16em] text-stone-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-ink">{value}%</p>
+    </div>
+  );
+}
+
 function chartOptions({ legend = true, horizontal = false, compact = false } = {}) {
   return {
     responsive: true,
@@ -217,26 +226,45 @@ function CompanyModal({ company, track, onClose, data }) {
           </Card>
 
           <Card kicker="Company" title="Funnel progression" className="md:col-span-2 xl:col-span-2">
-            <div className="h-48">
+            <div className="rounded-[1.5rem] border border-pine/10 bg-[linear-gradient(180deg,rgba(26,93,82,0.05),rgba(255,255,255,0.85))] p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-medium text-ink">Candidate progression</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">Percent of funnel</p>
+              </div>
+              <div className="h-40">
               <Line
                 options={{
                   ...chartOptions({ legend: false, compact: true }),
+                  interaction: {
+                    intersect: false,
+                    mode: "index",
+                  },
                   scales: {
                     x: {
-                      ticks: { color: palette.muted, font: { size: 10 } },
+                      ticks: { color: palette.muted, font: { size: 11, weight: "600" }, maxRotation: 0, minRotation: 0 },
                       grid: { display: false },
                       border: { display: false },
                     },
                     y: {
                       beginAtZero: true,
-                      suggestedMax: 100,
+                      max: 100,
                       ticks: {
                         color: palette.muted,
                         callback: (value) => `${value}%`,
+                        stepSize: 25,
                         font: { size: 10 },
                       },
-                      grid: { color: "rgba(23,23,23,0.06)" },
+                      grid: { color: "rgba(23,23,23,0.08)" },
                       border: { display: false },
+                    },
+                  },
+                  plugins: {
+                    ...chartOptions({ legend: false, compact: true }).plugins,
+                    tooltip: {
+                      ...chartOptions({ legend: false, compact: true }).plugins.tooltip,
+                      callbacks: {
+                        label: (context) => `${context.raw}%`,
+                      },
                     },
                   },
                 }}
@@ -247,16 +275,28 @@ function CompanyModal({ company, track, onClose, data }) {
                       label: "Progression",
                       data: funnelPercentages.length ? funnelPercentages.map((step) => step.value) : [0],
                       borderColor: palette.pine,
-                      borderWidth: 2.5,
-                      pointRadius: 4,
-                      pointHoverRadius: 5,
-                      pointBackgroundColor: palette.pine,
-                      tension: 0.28,
-                      fill: false,
+                      borderWidth: 4,
+                      pointRadius: 0,
+                      pointHoverRadius: 6,
+                      pointBackgroundColor: "#ffffff",
+                      pointBorderColor: palette.pine,
+                      pointBorderWidth: 3,
+                      stepped: "before",
+                      fill: true,
+                      backgroundColor: "rgba(26,93,82,0.16)",
+                      tension: 0,
                     },
                   ],
                 }}
               />
+              </div>
+              {funnelPercentages.length ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                  {funnelPercentages.map((step) => (
+                    <FunnelStagePill key={step.label} label={step.label} value={step.value} />
+                  ))}
+                </div>
+              ) : null}
             </div>
           </Card>
         </div>

@@ -41,6 +41,13 @@ class Settings(BaseSettings):
             return render_port
         return value
 
+    @field_validator("api_host", mode="before")
+    @classmethod
+    def normalize_api_host(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.split("#", 1)[0].strip()
+        return value
+
     @property
     def allowed_channel_ids(self) -> set[int]:
         if not self.allowed_channel_ids_raw.strip():

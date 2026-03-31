@@ -26,7 +26,9 @@ Private Discord recruiting tracker for logging process updates and viewing light
    python -m process_bot.app
    ```
 
-5. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+5. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) or [http://localhost:8000](http://localhost:8000).
+
+If the server is bound to `0.0.0.0`, that is the listen address, not the browser URL. Use `127.0.0.1` or `localhost` in your browser locally.
 
 If you set `DISCORD_GUILD_ID`, slash commands sync directly into that guild and usually appear quickly. Without it, commands sync globally and can take longer to show up.
 

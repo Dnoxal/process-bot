@@ -52,12 +52,23 @@ KNOWN_COMPANY_ABBREVIATIONS = {
     "wf": "Wells Fargo",
     "zon": "Amazon",
 }
+STAGE_FUNNEL_ORDER = ("oa", "behavioral", "technical", "final")
+STAGE_AUTO_BACKFILL = {
+    "oa": ("oa",),
+    "behavioral": ("oa", "behavioral"),
+    "technical": ("oa", "behavioral", "technical"),
+    "final": ("oa", "behavioral", "technical", "final"),
+}
 
 
 @dataclass(frozen=True)
 class CompanyAliasSuggestion:
     alias: str
     canonical_name: str
+
+
+def implied_stage_path(stage: str) -> tuple[str, ...]:
+    return STAGE_AUTO_BACKFILL.get(stage, (stage,))
 
 
 def normalize_employment_type(raw_employment_type: str | None) -> str | None:
@@ -164,6 +175,36 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
     )
     if existing:
         return existing
+
+    existing_stages = {
+        value
+        for value in session.scalars(
+            select(models.ProcessEvent.stage).where(
+                models.ProcessEvent.user_id == user.id,
+                models.ProcessEvent.company_id == company.id,
+            )
+        ).all()
+    }
+
+    for backfill_stage in implied_stage_path(stage)[:-1]:
+        if backfill_stage in existing_stages:
+            continue
+        session.add(
+            models.ProcessEvent(
+                user_id=user.id,
+                company_id=company.id,
+                stage=backfill_stage,
+                outcome=None,
+                employment_type=employment_type,
+                notes="Auto-recorded from later stage entry.",
+                recruiting_season=infer_recruiting_season(occurred_at),
+                discord_message_id=f"{payload.discord_message_id}:{backfill_stage}",
+                channel_id=payload.channel_id,
+                occurred_at=occurred_at,
+                source_command=payload.source_command,
+            )
+        )
+        existing_stages.add(backfill_stage)
 
     event = models.ProcessEvent(
         user_id=user.id,
@@ -343,15 +384,19 @@ def dashboard_company(session: Session, company_slug: str, employment_type: str 
     outcome_distribution = dict(Counter(event.outcome for event in events if event.outcome))
     trend_counts = Counter(str(event.occurred_at.date()) for event in events)
     ordered_trends = sorted(trend_counts.items())
+    user_stage_reach: dict[int, set[str]] = {}
+    for event in events:
+        reached = user_stage_reach.setdefault(event.user_id, set())
+        reached.update(implied_stage_path(event.stage))
 
     funnel_counts = [
-        ("OA", stage_distribution.get("oa", 0)),
-        ("Behavioral", stage_distribution.get("behavioral", 0)),
-        ("Technical", stage_distribution.get("technical", 0) + stage_distribution.get("onsite", 0)),
-        ("Offers", outcome_distribution.get("offered", 0)),
-        ("Rejections", outcome_distribution.get("rejected", 0)),
+        ("OA", sum(1 for reached in user_stage_reach.values() if "oa" in reached)),
+        ("Behavioral", sum(1 for reached in user_stage_reach.values() if "behavioral" in reached)),
+        ("Technical", sum(1 for reached in user_stage_reach.values() if "technical" in reached)),
+        ("Offers", len({event.user_id for event in events if event.outcome == "offered"})),
+        ("Rejections", len({event.user_id for event in events if event.outcome == "rejected"})),
     ]
-    funnel_base = next((value for _, value in funnel_counts if value > 0), 0)
+    funnel_base = funnel_counts[0][1] if funnel_counts else 0
     funnel_points = [
         schemas.FunnelPoint(label=label, value=round((value / funnel_base) * 100, 1))
         for label, value in funnel_counts
