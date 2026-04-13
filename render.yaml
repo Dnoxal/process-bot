@@ -3,7 +3,7 @@ services:
     name: process-bot
     env: python
     buildCommand: pip install -e . && npm install && npm run build
-    startCommand: python -m process_bot.web
+    startCommand: python -m process_bot.app
     envVars:
       - key: API_HOST
         value: 0.0.0.0

@@ -36,18 +36,12 @@ If you set `DISCORD_GUILD_ID`, slash commands sync directly into that guild and 
 
 ## Deployment
 
-For a web deployment, run the API by itself instead of the combined local runner:
-
-```bash
-python -m process_bot.web
-```
-
-This repo now includes a `render.yaml` that uses:
+This repo includes a `render.yaml` that runs the dashboard API and Discord bot together in one process:
 
 - build: `pip install -e . && npm install && npm run build`
-- start: `python -m process_bot.web`
+- start: `python -m process_bot.app`
 
-Why this matters: `python -m process_bot.app` starts both the FastAPI app and the Discord bot. That is convenient locally, but it can break a normal web deploy if your host is only meant to run the HTTP service or if `DISCORD_TOKEN` is not configured there.
+This means the deployed service will keep the FastAPI site up while also connecting the Discord bot, as long as `DISCORD_TOKEN` is configured in the deploy environment.
 
 ## Commands
 
