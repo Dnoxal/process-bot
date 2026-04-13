@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: process-bot
+    env: python
+    buildCommand: pip install -e . && npm install && npm run build
+    startCommand: python -m process_bot.web
+    envVars:
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: DATABASE_URL
+        value: sqlite:///./data/process_bot.db

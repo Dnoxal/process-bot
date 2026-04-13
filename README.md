@@ -34,6 +34,21 @@ If the server is bound to `0.0.0.0`, that is the listen address, not the browser
 
 If you set `DISCORD_GUILD_ID`, slash commands sync directly into that guild and usually appear quickly. Without it, commands sync globally and can take longer to show up.
 
+## Deployment
+
+For a web deployment, run the API by itself instead of the combined local runner:
+
+```bash
+python -m process_bot.web
+```
+
+This repo now includes a `render.yaml` that uses:
+
+- build: `pip install -e . && npm install && npm run build`
+- start: `python -m process_bot.web`
+
+Why this matters: `python -m process_bot.app` starts both the FastAPI app and the Discord bot. That is convenient locally, but it can break a normal web deploy if your host is only meant to run the HTTP service or if `DISCORD_TOKEN` is not configured there.
+
 ## Commands
 
 - `/process company:<name> stage:<stage> outcome:<optional>`
