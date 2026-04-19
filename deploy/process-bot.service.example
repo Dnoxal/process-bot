@@ -1,0 +1,15 @@
+[Unit]
+Description=Process Bot API + Discord bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/process-bot
+EnvironmentFile=/home/ubuntu/process-bot/.env
+ExecStart=/home/ubuntu/process-bot/.venv/bin/python -m process_bot.app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

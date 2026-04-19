@@ -43,6 +43,8 @@ This repo includes a `render.yaml` that runs the dashboard API and Discord bot t
 
 This means the deployed service will keep the FastAPI site up while also connecting the Discord bot, as long as `DISCORD_TOKEN` is configured in the deploy environment.
 
+For Oracle Cloud Free Tier on a VM, use the deployment guide in [docs/oracle-free-tier.md](/Users/danielli/Documents/GitHub/process-bot/docs/oracle-free-tier.md) plus the sample files in [deploy/process-bot.service.example](/Users/danielli/Documents/GitHub/process-bot/deploy/process-bot.service.example) and [deploy/nginx.process-bot.conf.example](/Users/danielli/Documents/GitHub/process-bot/deploy/nginx.process-bot.conf.example).
+
 ## Commands
 
 - `/process company:<name> stage:<stage> outcome:<optional>`
