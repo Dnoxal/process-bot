@@ -55,6 +55,13 @@ For Oracle Cloud Free Tier on a VM, use the deployment guide in [docs/oracle-fre
 
 Bot replies are ephemeral because the MVP now uses slash commands instead of prefix commands.
 
+For legacy text logging with `!process`, the bot infers the employment track from the channel name. These channel names are recognized:
+
+- `process` -> `intern`
+- `summer_2026_intern_process` -> `intern`
+- `2026_summer_intern_process` -> `intern`
+- `2026_grad_process` -> `full_time`
+
 ## API routes
 
 - `GET /api/health`

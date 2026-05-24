@@ -16,6 +16,7 @@ from process_bot.parser import ParseError, parse_process_command
 logger = logging.getLogger(__name__)
 settings = get_settings()
 PROCESS_CHANNEL_EMPLOYMENT_TYPES = {
+    "process": "intern",
     "summer_2026_intern_process": "intern",
     "2026_summer_intern_process": "intern",
     "2026_grad_process": "full_time",
