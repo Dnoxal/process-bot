@@ -60,7 +60,9 @@ For legacy text logging with `!process`, the bot infers the employment track fro
 - `process` -> `intern`
 - `summer_2026_intern_process` -> `intern`
 - `2026_summer_intern_process` -> `intern`
+- `2027_summer_intern_process` -> `intern`
 - `2026_grad_process` -> `full_time`
+- `2027_grad_process` -> `full_time`
 
 ## API routes
 

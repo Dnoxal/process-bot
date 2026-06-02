@@ -19,7 +19,9 @@ PROCESS_CHANNEL_EMPLOYMENT_TYPES = {
     "process": "intern",
     "summer_2026_intern_process": "intern",
     "2026_summer_intern_process": "intern",
+    "2027_summer_intern_process": "intern",
     "2026_grad_process": "full_time",
+    "2027_grad_process": "full_time",
 }
 PROCESS_STAGE_EXAMPLES = (
     "`!process amazon oa`\n"
@@ -690,8 +692,9 @@ def build_bot() -> commands.Bot:
             embed=build_notice_embed(
                 title="Use Text Command",
                 description=(
-                    "Use `!process <company> <stage>` in `summer_2026_intern_process` "
-                    "or `2026_grad_process`.\nThe channel decides intern vs full time."
+                    "Use `!process <company> <stage>` in a recognized process channel such as "
+                    "`2027_summer_intern_process` or `2027_grad_process`.\n"
+                    "The channel decides intern vs full time."
                 ),
             ),
             ephemeral=True,
