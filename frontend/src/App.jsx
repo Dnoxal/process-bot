@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Bar, Doughnut, Line } from "react-chartjs-2";
+import { Bar, Line } from "react-chartjs-2";
 
 async function fetchJson(url) {
   const response = await fetch(url);
@@ -18,11 +18,9 @@ const tracks = [
 const palette = {
   pine: "#1a5d52",
   brass: "#c99641",
-  blush: "#b86a73",
   slate: "#6777a7",
   ink: "#171717",
   muted: "#6b6962",
-  set: ["#1a5d52", "#c99641", "#b86a73", "#6777a7", "#171717"],
 };
 
 function humanize(value) {
@@ -33,29 +31,16 @@ function humanize(value) {
     .join(" ");
 }
 
-function canonicalStage(stage) {
-  return stage === "onsite" ? "technical" : stage;
-}
-
-function groupCounts(values) {
-  return values.reduce((acc, value) => {
-    acc[value] = (acc[value] || 0) + 1;
-    return acc;
-  }, {});
-}
-
 function sortEntries(record) {
   return Object.entries(record).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
-function Card({ title, kicker, children, className = "" }) {
+function Card({ title, note, children, className = "" }) {
   return (
-    <article className={`rounded-2xl border border-black/5 bg-white/85 p-4 shadow-panel backdrop-blur animate-rise ${className}`}>
-      <div className="mb-3 flex items-end justify-between gap-3">
-        <div>
-          <p className="mb-1 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-stone-500">{kicker}</p>
-          <h2 className="text-base font-semibold text-ink">{title}</h2>
-        </div>
+    <article className={`rounded-lg border border-stone-200 bg-white p-4 shadow-panel ${className}`}>
+      <div className="mb-4">
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        {note ? <p className="mt-1 text-sm text-stone-500">{note}</p> : null}
       </div>
       {children}
     </article>
@@ -64,18 +49,18 @@ function Card({ title, kicker, children, className = "" }) {
 
 function Metric({ label, value }) {
   return (
-    <div className="rounded-2xl border border-black/5 bg-white/90 p-4 shadow-panel animate-rise">
-      <p className="mb-2 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-stone-500">{label}</p>
-      <p className="text-2xl font-semibold text-ink">{value}</p>
+    <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-panel">
+      <p className="text-sm text-stone-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-ink">{value}</p>
     </div>
   );
 }
 
 function FunnelStagePill({ label, value }) {
   return (
-    <div className="rounded-2xl border border-pine/10 bg-[#f4f7f3] px-3 py-2">
-      <p className="text-[0.62rem] font-bold uppercase tracking-[0.16em] text-stone-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-ink">{value}%</p>
+    <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+      <p className="text-sm text-stone-500">{label}</p>
+      <p className="mt-1 text-base font-semibold text-ink">{value}%</p>
     </div>
   );
 }
@@ -104,51 +89,100 @@ function chartOptions({ legend = true, horizontal = false, compact = false } = {
     },
     scales: {
       x: {
-        ticks: { color: palette.muted, font: { size: compact ? 9 : 10 } },
+        ticks: { color: palette.muted, font: { size: compact ? 10 : 11 } },
         grid: { display: false },
         border: { display: false },
       },
       y: {
         beginAtZero: true,
-        ticks: { color: palette.muted, precision: 0, font: { size: compact ? 9 : 10 } },
-        grid: { color: "rgba(23,23,23,0.06)" },
+        ticks: { color: palette.muted, precision: 0, font: { size: compact ? 10 : 11 } },
+        grid: { color: "rgba(23,23,23,0.08)" },
         border: { display: false },
       },
     },
   };
 }
 
-function buildOverview(events) {
-  const stageCounts = groupCounts(events.map((event) => canonicalStage(event.stage)));
-  const outcomeCounts = groupCounts(events.filter((event) => event.outcome).map((event) => event.outcome));
-  const companyCounts = groupCounts(events.map((event) => event.company));
-  const employmentCounts = groupCounts(events.filter((event) => event.employment_type).map((event) => event.employment_type));
-  const trendCounts = events.reduce((acc, event) => {
-    const day = new Date(event.occurred_at).toISOString().slice(0, 10);
-    acc[day] = (acc[day] || 0) + 1;
-    return acc;
-  }, {});
+function TrackSplitPanel({ entries }) {
+  const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  const displayEntries = entries.length ? entries : [["No track data", 0]];
 
-  return {
-    totalEvents: events.length,
-    totalCandidates: new Set(events.map((event) => event.username)).size,
-    totalCompanies: new Set(events.map((event) => event.company_slug)).size,
-    offers: outcomeCounts.offered || 0,
-    stageCounts,
-    outcomeCounts,
-    companyCounts,
-    employmentCounts,
-    trendPoints: Object.entries(trendCounts)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, count]) => ({ date, count })),
-  };
+  return (
+    <div className="space-y-4">
+      {displayEntries.map(([label, count]) => {
+        const percent = total ? Math.round((count / total) * 100) : 0;
+        return (
+          <div key={label} className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-semibold text-ink">{humanize(label)}</span>
+              <span className="font-mono text-xs text-stone-500">
+                {total ? `${percent}%` : "empty"}
+              </span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-sm bg-stone-100">
+              <div
+                className="h-full rounded-sm bg-pine"
+                style={{ width: `${Math.max(percent, total ? 7 : 0)}%` }}
+              />
+            </div>
+            <p className="text-xs text-stone-500">{count} logged event{count === 1 ? "" : "s"}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-function filterEvents(events, track) {
-  if (track === "all") {
-    return events;
+function RecentOffersPanel({ offers }) {
+  if (!offers?.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 py-5 text-sm text-stone-500">
+        No offers logged yet.
+      </div>
+    );
   }
-  return events.filter((event) => event.employment_type === track);
+
+  return (
+    <div className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200">
+      {offers.map((offer, index) => (
+        <div
+          key={`${offer.company_slug}-${offer.occurred_at}-${index}`}
+          className="px-3 py-2.5"
+        >
+          <span className="text-sm font-semibold text-ink">{offer.company}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DistributionList({ entries, emptyLabel = "No data yet" }) {
+  const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  if (!entries.length) {
+    return <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-500">{emptyLabel}</p>;
+  }
+
+  return (
+    <div className="divide-y divide-stone-200 rounded-lg border border-stone-200">
+      {entries.map(([label, count]) => {
+        const percent = total ? Math.round((count / total) * 100) : 0;
+        return (
+          <div key={label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium text-ink">{humanize(label)}</p>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-sm bg-stone-100">
+                <div className="h-full rounded-sm bg-pine" style={{ width: `${Math.max(percent, 4)}%` }} />
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="font-mono text-sm text-ink">{count}</p>
+              <p className="font-mono text-xs text-stone-500">{percent}%</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function CompanyModal({ company, track, onClose, data }) {
@@ -159,17 +193,16 @@ function CompanyModal({ company, track, onClose, data }) {
   return (
     <div className="fixed inset-0 z-30">
       <button className="absolute inset-0 bg-black/35" aria-label="Close modal" onClick={onClose} />
-      <section className="relative z-10 mx-auto my-3 max-h-[calc(100vh-24px)] w-[min(980px,calc(100%-24px))] overflow-auto rounded-3xl border border-black/5 bg-white/95 p-4 shadow-panel backdrop-blur">
+      <section className="relative z-10 mx-auto my-4 max-h-[calc(100vh-32px)] w-[min(1040px,calc(100%-24px))] overflow-auto rounded-lg border border-stone-200 bg-white p-5 shadow-panel">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="mb-1 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-stone-500">ProcTracker</p>
             <h2 className="text-2xl font-semibold text-ink">{company.name}</h2>
             <p className="text-sm text-stone-500">{humanize(track)} view</p>
           </div>
-          <button className="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white" onClick={onClose}>Close</button>
+          <button className="rounded-md bg-ink px-3 py-2 text-sm font-semibold text-white" onClick={onClose}>Close</button>
         </div>
 
-        <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Metric label="Company" value={company.name} />
           <Metric label="Events" value={data.total_events} />
           <Metric label="Candidates" value={data.total_candidates} />
@@ -177,9 +210,9 @@ function CompanyModal({ company, track, onClose, data }) {
           <Metric label="Latest" value={data.latest_activity ? new Date(data.latest_activity).toLocaleDateString() : "—"} />
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Card kicker="Company" title="Activity" className="xl:col-span-2">
-            <div className="h-48">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Card title="Activity" className="xl:col-span-2">
+            <div className="h-56">
               <Line
                 options={chartOptions({ legend: false, compact: true })}
                 data={{
@@ -201,37 +234,21 @@ function CompanyModal({ company, track, onClose, data }) {
             </div>
           </Card>
 
-          <Card kicker="Company" title="Stage mix">
-            <div className="h-48">
-              <Doughnut
-                options={{ ...chartOptions(), cutout: "70%", scales: undefined }}
-                data={{
-                  labels: stageEntries.length ? stageEntries.map(([label]) => humanize(label)) : ["No stage data"],
-                  datasets: [{ data: stageEntries.length ? stageEntries.map(([, count]) => count) : [1], backgroundColor: stageEntries.length ? palette.set : ["rgba(23,23,23,0.08)"], borderWidth: 0 }],
-                }}
-              />
-            </div>
+          <Card title="Stage mix">
+            <DistributionList entries={stageEntries} emptyLabel="No stage data" />
           </Card>
 
-          <Card kicker="Company" title="Outcome mix">
-            <div className="h-48">
-              <Doughnut
-                options={{ ...chartOptions(), cutout: "70%", scales: undefined }}
-                data={{
-                  labels: outcomeEntries.length ? outcomeEntries.map(([label]) => humanize(label)) : ["No outcome data"],
-                  datasets: [{ data: outcomeEntries.length ? outcomeEntries.map(([, count]) => count) : [1], backgroundColor: outcomeEntries.length ? palette.set : ["rgba(23,23,23,0.08)"], borderWidth: 0 }],
-                }}
-              />
-            </div>
+          <Card title="Outcome mix">
+            <DistributionList entries={outcomeEntries} emptyLabel="No outcome data" />
           </Card>
 
-          <Card kicker="Company" title="Funnel progression" className="md:col-span-2 xl:col-span-2">
-            <div className="rounded-[1.5rem] border border-pine/10 bg-[linear-gradient(180deg,rgba(26,93,82,0.05),rgba(255,255,255,0.85))] p-3">
+          <Card title="Funnel progression" className="md:col-span-2 xl:col-span-2">
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-medium text-ink">Candidate progression</p>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">Percent of funnel</p>
+                <p className="text-xs text-stone-500">Percent of funnel</p>
               </div>
-              <div className="h-40">
+              <div className="h-48">
               <Line
                 options={{
                   ...chartOptions({ legend: false, compact: true }),
@@ -369,16 +386,15 @@ export default function App() {
 
   return (
     <>
-      <main className="mx-auto w-[min(1180px,calc(100%-24px))] py-5">
-        <header className="mb-3 grid gap-3 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-          <section className="rounded-2xl border border-black/5 bg-white/88 p-5 shadow-panel">
-            <p className="mb-1 text-[0.68rem] font-bold uppercase tracking-[0.18em] text-stone-500">ProcTracker</p>
-            <h1 className="mb-2 text-4xl font-semibold leading-none tracking-tight text-ink sm:text-5xl">Recruiting signals in one compact view.</h1>
-            <p className="max-w-2xl text-sm leading-6 text-stone-500">Switch between tracks, compare trends quickly, and open a company popup only when you need a deeper read.</p>
+      <main className="mx-auto w-[min(1240px,calc(100%-28px))] py-6">
+        <header className="mb-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch">
+          <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-panel">
+            <h1 className="text-2xl font-semibold text-ink">Process dashboard</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">Aggregate recruiting activity from Discord. Individual process history stays private.</p>
           </section>
 
-          <section className="rounded-2xl border border-black/5 bg-white/96 p-4 shadow-panel">
-            <div className="mb-3 inline-flex gap-1 rounded-full bg-black/[0.04] p-1">
+          <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-panel">
+            <div className="mb-3 flex gap-2">
               {tracks.map((item) => (
                 <button
                   key={item.id}
@@ -388,7 +404,7 @@ export default function App() {
                     setSelectedCompany(null);
                     setStatus(`Loading ${humanize(item.id).toLowerCase()} activity...`);
                   }}
-                  className={`rounded-full px-3 py-2 text-sm font-semibold transition ${track === item.id ? "bg-ink text-white" : "text-stone-500 hover:bg-black/[0.05] hover:text-ink"}`}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${track === item.id ? "border-ink bg-ink text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:text-ink"}`}
                 >
                   {item.label}
                 </button>
@@ -402,30 +418,30 @@ export default function App() {
                 value={searchValue}
                 onChange={(event) => setSearchValue(event.target.value)}
                 placeholder="Search company"
-                className="rounded-xl border border-black/10 bg-white px-3 py-3 text-sm outline-none transition focus:border-pine"
+                className="rounded-md border border-stone-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/15"
               />
               <datalist id="company-options">
                 {companies.map((company) => (
                   <option key={company.slug} value={company.name} />
                 ))}
               </datalist>
-              <button type="submit" className="rounded-xl bg-pine px-4 py-3 text-sm font-semibold text-white">Open</button>
+              <button type="submit" className="rounded-md bg-pine px-4 py-2.5 text-sm font-semibold text-white">Open</button>
             </form>
           </section>
         </header>
 
-        <p className="mb-3 min-h-5 text-sm text-stone-500">{status}</p>
+        <p className="mb-4 min-h-5 text-sm text-stone-500">{status}</p>
 
-        <section className="mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Events" value={overview?.total_events ?? "—"} />
           <Metric label="Candidates" value={overview?.total_candidates ?? "—"} />
           <Metric label="Companies" value={overview?.total_companies ?? "—"} />
           <Metric label="Offers" value={overview?.offers ?? "—"} />
         </section>
 
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Card kicker="Overview" title="Activity trend" className="xl:col-span-2">
-            <div className="h-44">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Card title="Activity trend" className="xl:col-span-2">
+            <div className="h-60">
               <Line
                 options={chartOptions({ legend: false, compact: true })}
                 data={{
@@ -447,8 +463,8 @@ export default function App() {
             </div>
           </Card>
 
-          <Card kicker="Overview" title="Top companies">
-            <div className="h-44">
+          <Card title="Top companies">
+            <div className="h-60">
               <Bar
                 options={chartOptions({ legend: false, horizontal: true, compact: true })}
                 data={{
@@ -459,60 +475,20 @@ export default function App() {
             </div>
           </Card>
 
-          <Card kicker="Offers" title="Recent offers">
-            <div className="space-y-2">
-              {overview?.recent_offers?.length ? (
-                overview.recent_offers.map((offer, index) => (
-                  <div
-                    key={`${offer.company_slug}-${offer.occurred_at}-${index}`}
-                    className="flex items-center justify-between rounded-2xl border border-brass/10 bg-[#fff8ec] px-3 py-2"
-                  >
-                    <span className="text-sm font-semibold text-ink">{offer.company}</span>
-                    <span className="h-2 w-2 rounded-full bg-brass" aria-hidden="true" />
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-black/5 bg-black/[0.03] px-3 py-4 text-sm text-stone-500">
-                  No offers logged yet.
-                </div>
-              )}
-            </div>
+          <Card title="Track split">
+            <TrackSplitPanel entries={employmentEntries} />
           </Card>
 
-          <Card kicker="Overview" title="Stage mix">
-            <div className="h-44">
-              <Doughnut
-                options={{ ...chartOptions(), cutout: "72%", scales: undefined }}
-                data={{
-                  labels: stageEntries.length ? stageEntries.map(([label]) => humanize(label)) : ["No stage data"],
-                  datasets: [{ data: stageEntries.length ? stageEntries.map(([, count]) => count) : [1], backgroundColor: stageEntries.length ? palette.set : ["rgba(23,23,23,0.08)"], borderWidth: 0 }],
-                }}
-              />
-            </div>
+          <Card title="Stage mix">
+            <DistributionList entries={stageEntries} emptyLabel="No stage data" />
           </Card>
 
-          <Card kicker="Overview" title="Outcome mix">
-            <div className="h-44">
-              <Doughnut
-                options={{ ...chartOptions(), cutout: "72%", scales: undefined }}
-                data={{
-                  labels: outcomeEntries.length ? outcomeEntries.map(([label]) => humanize(label)) : ["No outcome data"],
-                  datasets: [{ data: outcomeEntries.length ? outcomeEntries.map(([, count]) => count) : [1], backgroundColor: outcomeEntries.length ? palette.set : ["rgba(23,23,23,0.08)"], borderWidth: 0 }],
-                }}
-              />
-            </div>
+          <Card title="Outcome mix">
+            <DistributionList entries={outcomeEntries} emptyLabel="No outcome data" />
           </Card>
 
-          <Card kicker="Overview" title="Track split">
-            <div className="h-44">
-              <Bar
-                options={chartOptions({ legend: false, compact: true })}
-                data={{
-                  labels: employmentEntries.map(([label]) => humanize(label)),
-                  datasets: [{ label: "Events", data: employmentEntries.map(([, count]) => count), backgroundColor: palette.slate, borderRadius: 8, maxBarThickness: 24 }],
-                }}
-              />
-            </div>
+          <Card title="Recent offers">
+            <RecentOffersPanel offers={overview?.recent_offers || []} />
           </Card>
         </section>
       </main>
