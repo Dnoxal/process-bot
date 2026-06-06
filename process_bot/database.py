@@ -46,3 +46,16 @@ def run_migrations() -> None:
     if "employment_type" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE process_events ADD COLUMN employment_type VARCHAR(32)"))
+
+    if engine.dialect.name == "postgresql":
+        process_event_columns = {column["name"]: column for column in inspector.get_columns("process_events")}
+        with engine.begin() as connection:
+            discord_message_id_length = getattr(process_event_columns["discord_message_id"]["type"], "length", None)
+            if discord_message_id_length and discord_message_id_length < 128:
+                connection.execute(
+                    text("ALTER TABLE process_events ALTER COLUMN discord_message_id TYPE VARCHAR(128)")
+                )
+
+            channel_id_length = getattr(process_event_columns["channel_id"]["type"], "length", None)
+            if channel_id_length and channel_id_length < 128:
+                connection.execute(text("ALTER TABLE process_events ALTER COLUMN channel_id TYPE VARCHAR(128)"))

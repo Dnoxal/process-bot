@@ -459,6 +459,26 @@ export default function App() {
             </div>
           </Card>
 
+          <Card kicker="Offers" title="Recent offers">
+            <div className="space-y-2">
+              {overview?.recent_offers?.length ? (
+                overview.recent_offers.map((offer, index) => (
+                  <div
+                    key={`${offer.company_slug}-${offer.occurred_at}-${index}`}
+                    className="flex items-center justify-between rounded-2xl border border-brass/10 bg-[#fff8ec] px-3 py-2"
+                  >
+                    <span className="text-sm font-semibold text-ink">{offer.company}</span>
+                    <span className="h-2 w-2 rounded-full bg-brass" aria-hidden="true" />
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-black/5 bg-black/[0.03] px-3 py-4 text-sm text-stone-500">
+                  No offers logged yet.
+                </div>
+              )}
+            </div>
+          </Card>
+
           <Card kicker="Overview" title="Stage mix">
             <div className="h-44">
               <Doughnut

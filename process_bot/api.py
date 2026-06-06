@@ -1,11 +1,15 @@
 from pathlib import Path
+from secrets import compare_digest
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
+from process_bot.config import get_settings
 from process_bot.database import get_db, init_db
 from process_bot import schemas, services
 
@@ -15,9 +19,37 @@ FRONTEND_BUILD_DIR = BASE_DIR / "static" / "app"
 FRONTEND_ASSETS_DIR = FRONTEND_BUILD_DIR / "assets"
 
 app = FastAPI(title="Process Tracker API", version="0.1.0")
+api_token_scheme = HTTPBearer(auto_error=False)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 if FRONTEND_ASSETS_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_ASSETS_DIR)), name="assets")
+
+
+def validate_api_token(credentials: HTTPAuthorizationCredentials | None) -> None:
+    settings = get_settings()
+    if not settings.api_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PROCESS_API_TOKEN is required for this endpoint.",
+        )
+    if not credentials or not compare_digest(credentials.credentials, settings.api_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def require_api_token(credentials: HTTPAuthorizationCredentials | None = Depends(api_token_scheme)) -> None:
+    validate_api_token(credentials)
+
+
+def allow_public_dashboard_or_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(api_token_scheme),
+) -> None:
+    if get_settings().public_dashboard:
+        return
+    validate_api_token(credentials)
 
 
 @app.on_event("startup")
@@ -42,19 +74,30 @@ def healthcheck() -> dict[str, str]:
 
 
 @app.get("/api/companies", response_model=list[schemas.CompanyResponse])
-def get_companies(db: Session = Depends(get_db)) -> list[schemas.CompanyResponse]:
+def get_companies(
+    db: Session = Depends(get_db),
+    _: None = Depends(allow_public_dashboard_or_token),
+) -> list[schemas.CompanyResponse]:
     return services.list_companies(db)
 
 
 @app.post("/api/companies", response_model=schemas.CompanyResponse)
-def create_company(payload: schemas.CompanyCreate, db: Session = Depends(get_db)) -> schemas.CompanyResponse:
+def create_company(
+    payload: schemas.CompanyCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
+) -> schemas.CompanyResponse:
     company = services.get_or_create_company(db, payload.name)
     db.commit()
     return company
 
 
 @app.post("/api/company-aliases")
-def create_company_alias(payload: schemas.CompanyAliasCreate, db: Session = Depends(get_db)) -> dict[str, str]:
+def create_company_alias(
+    payload: schemas.CompanyAliasCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
+) -> dict[str, str]:
     try:
         alias = services.create_company_alias(db, payload.company_slug, payload.alias)
     except ValueError as exc:
@@ -64,12 +107,19 @@ def create_company_alias(payload: schemas.CompanyAliasCreate, db: Session = Depe
 
 
 @app.get("/api/stats/global", response_model=schemas.GlobalStatsResponse)
-def get_global_stats(db: Session = Depends(get_db)) -> schemas.GlobalStatsResponse:
+def get_global_stats(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
+) -> schemas.GlobalStatsResponse:
     return services.global_stats(db)
 
 
 @app.get("/api/stats/company/{company_slug}", response_model=schemas.CompanyStatsResponse)
-def get_company_stats(company_slug: str, db: Session = Depends(get_db)) -> schemas.CompanyStatsResponse:
+def get_company_stats(
+    company_slug: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
+) -> schemas.CompanyStatsResponse:
     stats = services.company_stats(db, company_slug)
     if not stats:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -80,6 +130,7 @@ def get_company_stats(company_slug: str, db: Session = Depends(get_db)) -> schem
 def get_trends(
     company_slug: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
 ) -> list[schemas.TrendPoint]:
     return services.event_trends(db, company_slug=company_slug)
 
@@ -88,6 +139,7 @@ def get_trends(
 def get_dashboard_overview(
     employment_type: str = Query(default="all"),
     db: Session = Depends(get_db),
+    _: None = Depends(allow_public_dashboard_or_token),
 ) -> schemas.DashboardOverviewResponse:
     return services.dashboard_overview(db, employment_type=employment_type)
 
@@ -97,6 +149,7 @@ def get_dashboard_company(
     company_slug: str,
     employment_type: str = Query(default="all"),
     db: Session = Depends(get_db),
+    _: None = Depends(allow_public_dashboard_or_token),
 ) -> schemas.DashboardCompanyResponse:
     result = services.dashboard_company(db, company_slug=company_slug, employment_type=employment_type)
     if not result:
@@ -108,6 +161,7 @@ def get_dashboard_company(
 def get_my_processes(
     discord_user_id: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
 ) -> list[schemas.ProcessEventResponse]:
     return services.list_user_processes(db, discord_user_id)
 
@@ -116,6 +170,7 @@ def get_my_processes(
 def create_process_event(
     payload: schemas.ProcessEventCreate,
     db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
 ) -> schemas.ProcessEventResponse:
     try:
         event = services.create_process_event(db, payload)
@@ -132,6 +187,7 @@ def update_process_event(
     event_id: int,
     payload: schemas.ProcessEventUpdate,
     db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
 ) -> schemas.ProcessEventResponse:
     try:
         event = services.update_process_event(db, event_id, payload)
@@ -146,7 +202,11 @@ def update_process_event(
 
 
 @app.delete("/api/process-events/{event_id}")
-def delete_process_event(event_id: int, db: Session = Depends(get_db)) -> dict[str, bool]:
+def delete_process_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
+) -> dict[str, bool]:
     deleted = services.delete_process_event(db, event_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Process event not found")
@@ -155,5 +215,8 @@ def delete_process_event(event_id: int, db: Session = Depends(get_db)) -> dict[s
 
 
 @app.get("/api/admin/process-events", response_model=list[schemas.ProcessEventResponse])
-def get_all_process_events(db: Session = Depends(get_db)) -> list[schemas.ProcessEventResponse]:
+def get_all_process_events(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_api_token),
+) -> list[schemas.ProcessEventResponse]:
     return services.list_all_process_events(db)

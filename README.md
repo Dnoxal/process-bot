@@ -16,19 +16,20 @@ Bot for the largest computer science recruiting discord server.
 
 1. Create a Discord bot in the Discord developer portal.
 2. Copy `.env.example` to `.env` and fill in `DISCORD_TOKEN`.
-3. Install dependencies:
+3. Set `PROCESS_API_TOKEN` if you plan to use protected API endpoints outside the Discord bot.
+4. Install dependencies:
 
    ```bash
    pip install -e .
    ```
 
-4. Run the API and Discord bot together:
+5. Run the API and Discord bot together:
 
    ```bash
    python -m process_bot.app
    ```
 
-5. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) or [http://localhost:8000](http://localhost:8000).
+6. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) or [http://localhost:8000](http://localhost:8000).
 
 If the server is bound to `0.0.0.0`, that is the listen address, not the browser URL. Use `127.0.0.1` or `localhost` in your browser locally.
 
@@ -40,8 +41,9 @@ This repo includes a `render.yaml` that runs the dashboard API and Discord bot t
 
 - build: `pip install -e . && npm install && npm run build`
 - start: `python -m process_bot.app`
+- database: managed Postgres via the `process-bot-db` blueprint resource
 
-This means the deployed service will keep the FastAPI site up while also connecting the Discord bot, as long as `DISCORD_TOKEN` is configured in the deploy environment.
+This means the deployed service will keep the FastAPI site up while also connecting the Discord bot, as long as `DISCORD_TOKEN` is configured in the deploy environment. Set `PROCESS_API_TOKEN` in production so protected API routes can be used intentionally without exposing writes/deletes to the public internet.
 
 For Oracle Cloud Free Tier on a VM, use the deployment guide in [docs/oracle-free-tier.md](/Users/danielli/Documents/GitHub/process-bot/docs/oracle-free-tier.md) plus the sample files in [deploy/process-bot.service.example](/Users/danielli/Documents/GitHub/process-bot/deploy/process-bot.service.example) and [deploy/nginx.process-bot.conf.example](/Users/danielli/Documents/GitHub/process-bot/deploy/nginx.process-bot.conf.example).
 
@@ -67,20 +69,25 @@ For legacy text logging with `!process`, the bot infers the employment track fro
 ## API routes
 
 - `GET /api/health`
-- `GET /api/companies`
-- `POST /api/companies`
-- `POST /api/company-aliases`
-- `GET /api/stats/global`
-- `GET /api/stats/company/{slug}`
-- `GET /api/stats/trends`
-- `GET /api/me/processes?discord_user_id=<id>`
-- `POST /api/process-events`
-- `PATCH /api/process-events/{id}`
-- `DELETE /api/process-events/{id}`
-- `GET /api/admin/process-events`
+- `GET /api/companies` public when `PROCESS_PUBLIC_DASHBOARD=true`, otherwise requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `POST /api/companies` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `POST /api/company-aliases` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `GET /api/stats/global` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `GET /api/stats/company/{slug}` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `GET /api/stats/trends` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `GET /api/dashboard/overview` public aggregate data when `PROCESS_PUBLIC_DASHBOARD=true`, otherwise requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `GET /api/dashboard/company/{slug}` public aggregate data when `PROCESS_PUBLIC_DASHBOARD=true`, otherwise requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `GET /api/me/processes?discord_user_id=<id>` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `POST /api/process-events` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `PATCH /api/process-events/{id}` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `DELETE /api/process-events/{id}` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
+- `GET /api/admin/process-events` requires `Authorization: Bearer <PROCESS_API_TOKEN>`
 
 ## Notes
 
 - `PROCESS_ALLOWED_CHANNEL_IDS` accepts a comma-separated list. Leave it blank to allow commands in any channel.
+- `PROCESS_API_TOKEN` protects write, delete, admin, and user-specific HTTP API routes. Leave it unset only if those routes should be unusable.
+- `PROCESS_PUBLIC_DASHBOARD` defaults to `true`. Set it to `false` only if the dashboard/API are behind proxy auth or you are okay with the browser dashboard failing unauthenticated API requests.
 - The database defaults to `./data/process_bot.db`.
-- This MVP keeps admin endpoints open because it is intended for a private server setup. Add auth before exposing it publicly.
+- Public dashboard endpoints expose aggregate company-level data only. User-specific process history stays token-protected and bot `/myprocesses` is scoped to the requesting Discord user.
+- Later-stage logs only auto-backfill earlier stages that have already appeared for the same company and employment track. This avoids inventing OAs for companies whose process history does not show OAs.

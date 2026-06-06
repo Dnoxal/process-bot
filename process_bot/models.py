@@ -43,6 +43,14 @@ class ProcessEvent(Base):
     __tablename__ = "process_events"
     __table_args__ = (
         UniqueConstraint("discord_message_id", name="uq_process_events_discord_message_id"),
+        UniqueConstraint(
+            "user_id",
+            "company_id",
+            "stage",
+            "employment_type",
+            "recruiting_season",
+            name="uq_process_events_user_company_stage_track_season",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -54,8 +62,8 @@ class ProcessEvent(Base):
     recruiting_season: Mapped[str | None] = mapped_column(String(64), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_command: Mapped[str | None] = mapped_column(Text, nullable=True)
-    discord_message_id: Mapped[str] = mapped_column(String(32))
-    channel_id: Mapped[str] = mapped_column(String(32), index=True)
+    discord_message_id: Mapped[str] = mapped_column(String(128))
+    channel_id: Mapped[str] = mapped_column(String(128), index=True)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from process_bot import models, schemas
@@ -69,6 +70,28 @@ class CompanyAliasSuggestion:
 
 def implied_stage_path(stage: str) -> tuple[str, ...]:
     return STAGE_AUTO_BACKFILL.get(stage, (stage,))
+
+
+def observed_company_backfill_path(
+    session: Session,
+    *,
+    company_id: int,
+    stage: str,
+    employment_type: str | None,
+) -> tuple[str, ...]:
+    candidate_stages = implied_stage_path(stage)[:-1]
+    if not candidate_stages:
+        return ()
+
+    observed_stages = set(
+        session.scalars(
+            select(models.ProcessEvent.stage).where(
+                models.ProcessEvent.company_id == company_id,
+                models.ProcessEvent.employment_type == employment_type,
+            )
+        ).all()
+    )
+    return tuple(candidate_stage for candidate_stage in candidate_stages if candidate_stage in observed_stages)
 
 
 def normalize_employment_type(raw_employment_type: str | None) -> str | None:
@@ -168,7 +191,10 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
         raise ValueError(f"Unsupported employment type: {payload.employment_type}")
     company = get_or_create_company(session, payload.company)
     user = get_or_create_user(session, discord_user_id=payload.discord_user_id, username=payload.username)
+    company_id = company.id
+    user_id = user.id
     occurred_at = payload.occurred_at or datetime.now(timezone.utc)
+    recruiting_season = infer_recruiting_season(occurred_at)
 
     existing = session.scalar(
         select(models.ProcessEvent).where(models.ProcessEvent.discord_message_id == payload.discord_message_id)
@@ -176,51 +202,89 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
     if existing:
         return existing
 
-    existing_stages = {
-        value
-        for value in session.scalars(
-            select(models.ProcessEvent.stage).where(
-                models.ProcessEvent.user_id == user.id,
-                models.ProcessEvent.company_id == company.id,
+    existing_stage_events: dict[str, models.ProcessEvent] = {
+        event.stage: event
+        for event in session.scalars(
+            select(models.ProcessEvent)
+            .options(joinedload(models.ProcessEvent.company), joinedload(models.ProcessEvent.user))
+            .where(
+                models.ProcessEvent.user_id == user_id,
+                models.ProcessEvent.company_id == company_id,
+                models.ProcessEvent.employment_type == employment_type,
+                models.ProcessEvent.recruiting_season == recruiting_season,
             )
         ).all()
     }
+    existing_stage_names = set(existing_stage_events)
 
-    for backfill_stage in implied_stage_path(stage)[:-1]:
-        if backfill_stage in existing_stages:
+    backfill_path = observed_company_backfill_path(
+        session,
+        company_id=company_id,
+        stage=stage,
+        employment_type=employment_type,
+    )
+    for backfill_stage in backfill_path:
+        if backfill_stage in existing_stage_names:
             continue
         session.add(
             models.ProcessEvent(
-                user_id=user.id,
-                company_id=company.id,
+                user_id=user_id,
+                company_id=company_id,
                 stage=backfill_stage,
                 outcome=None,
                 employment_type=employment_type,
                 notes="Auto-recorded from later stage entry.",
-                recruiting_season=infer_recruiting_season(occurred_at),
+                recruiting_season=recruiting_season,
                 discord_message_id=f"{payload.discord_message_id}:{backfill_stage}",
                 channel_id=payload.channel_id,
                 occurred_at=occurred_at,
                 source_command=payload.source_command,
             )
         )
-        existing_stages.add(backfill_stage)
+        existing_stage_names.add(backfill_stage)
+
+    existing_stage_event = existing_stage_events.get(stage)
+    if existing_stage_event:
+        return existing_stage_event
 
     event = models.ProcessEvent(
-        user_id=user.id,
-        company_id=company.id,
+        user_id=user_id,
+        company_id=company_id,
         stage=stage,
         outcome=outcome,
         employment_type=employment_type,
         notes=payload.notes,
-        recruiting_season=infer_recruiting_season(occurred_at),
+        recruiting_season=recruiting_season,
         discord_message_id=payload.discord_message_id,
         channel_id=payload.channel_id,
         occurred_at=occurred_at,
         source_command=payload.source_command,
     )
     session.add(event)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        existing = session.scalar(
+            select(models.ProcessEvent)
+            .options(joinedload(models.ProcessEvent.company), joinedload(models.ProcessEvent.user))
+            .where(
+                (
+                    models.ProcessEvent.discord_message_id == payload.discord_message_id
+                )
+                | (
+                    (models.ProcessEvent.user_id == user_id)
+                    & (models.ProcessEvent.company_id == company_id)
+                    & (models.ProcessEvent.stage == stage)
+                    & (models.ProcessEvent.employment_type == employment_type)
+                    & (models.ProcessEvent.recruiting_season == recruiting_season)
+                )
+            )
+        )
+        if existing:
+            return existing
+        raise
+
     session.refresh(event)
     return event
 
@@ -344,6 +408,16 @@ def dashboard_overview(session: Session, employment_type: str = "all") -> schema
         )
     ).all()
 
+    recent_offer_rows = session.execute(
+        _apply_employment_type_filter(
+            select(models.Company.name, models.Company.slug, models.ProcessEvent.occurred_at)
+            .join(models.ProcessEvent)
+            .where(models.ProcessEvent.outcome == "offered")
+            .order_by(models.ProcessEvent.occurred_at.desc(), models.ProcessEvent.id.desc()),
+            employment_type,
+        ).limit(8)
+    ).all()
+
     return schemas.DashboardOverviewResponse(
         total_events=total_events,
         total_candidates=total_candidates,
@@ -354,6 +428,9 @@ def dashboard_overview(session: Session, employment_type: str = "all") -> schema
         employment_distribution=employment_distribution,
         top_companies=[schemas.NamedCount(label=row[0], value=row[1]) for row in top_company_rows],
         trend_points=[schemas.TrendPoint(period_start=str(row[0]), events=row[1]) for row in trend_rows],
+        recent_offers=[
+            schemas.RecentOffer(company=row[0], company_slug=row[1], occurred_at=row[2]) for row in recent_offer_rows
+        ],
     )
 
 

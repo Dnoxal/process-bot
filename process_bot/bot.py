@@ -59,6 +59,15 @@ def channel_allowed(channel_id: int) -> bool:
     return not allowed_channels or channel_id in allowed_channels
 
 
+def message_channel_allowed(channel: discord.abc.GuildChannel | discord.Thread | None) -> bool:
+    allowed_channels = settings.allowed_channel_ids
+    if not allowed_channels:
+        return True
+    channel_id = getattr(channel, "id", None)
+    parent_id = getattr(channel, "parent_id", None)
+    return channel_id in allowed_channels or parent_id in allowed_channels
+
+
 def get_process_channel_employment_type(channel: discord.abc.GuildChannel | discord.Thread | None) -> str | None:
     channel_name = getattr(channel, "name", None)
     if not channel_name:
@@ -548,6 +557,8 @@ def build_bot() -> commands.Bot:
     @bot.event
     async def on_message(message: Message) -> None:
         if message.author.bot:
+            return
+        if not message_channel_allowed(message.channel):
             return
 
         content = message.content.strip()

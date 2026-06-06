@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     discord_command_prefix: str = Field(default="!", alias="DISCORD_COMMAND_PREFIX")
     discord_guild_id: int | None = Field(default=None, alias="DISCORD_GUILD_ID")
     allowed_channel_ids_raw: str = Field(default="", alias="PROCESS_ALLOWED_CHANNEL_IDS")
+    api_token: str = Field(default="", alias="PROCESS_API_TOKEN")
+    public_dashboard: bool = Field(default=True, alias="PROCESS_PUBLIC_DASHBOARD")
     database_url: str = Field(
         default=f"sqlite:///{Path.cwd() / 'data' / 'process_bot.db'}",
         alias="DATABASE_URL",

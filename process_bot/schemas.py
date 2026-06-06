@@ -8,29 +8,29 @@ class CompanyCreate(BaseModel):
 
 
 class CompanyAliasCreate(BaseModel):
-    company_slug: str
+    company_slug: str = Field(min_length=1, max_length=255)
     alias: str = Field(min_length=1, max_length=255)
 
 
 class ProcessEventCreate(BaseModel):
-    discord_user_id: str
-    username: str
-    company: str
-    stage: str
-    outcome: str | None = None
-    employment_type: str | None = None
-    notes: str | None = None
-    discord_message_id: str
-    channel_id: str
+    discord_user_id: str = Field(min_length=1, max_length=32)
+    username: str = Field(min_length=1, max_length=255)
+    company: str = Field(min_length=1, max_length=255)
+    stage: str = Field(min_length=1, max_length=64)
+    outcome: str | None = Field(default=None, max_length=64)
+    employment_type: str | None = Field(default=None, max_length=32)
+    notes: str | None = Field(default=None, max_length=2000)
+    discord_message_id: str = Field(min_length=1, max_length=128)
+    channel_id: str = Field(min_length=1, max_length=128)
     occurred_at: datetime | None = None
-    source_command: str | None = None
+    source_command: str | None = Field(default=None, max_length=2000)
 
 
 class ProcessEventUpdate(BaseModel):
-    stage: str | None = None
-    outcome: str | None = None
-    employment_type: str | None = None
-    notes: str | None = None
+    stage: str | None = Field(default=None, max_length=64)
+    outcome: str | None = Field(default=None, max_length=64)
+    employment_type: str | None = Field(default=None, max_length=32)
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class CompanyResponse(BaseModel):
@@ -90,6 +90,12 @@ class FunnelPoint(BaseModel):
     value: float
 
 
+class RecentOffer(BaseModel):
+    company: str
+    company_slug: str
+    occurred_at: datetime
+
+
 class DashboardOverviewResponse(BaseModel):
     total_events: int
     total_candidates: int
@@ -100,6 +106,7 @@ class DashboardOverviewResponse(BaseModel):
     employment_distribution: dict[str, int]
     top_companies: list[NamedCount]
     trend_points: list[TrendPoint]
+    recent_offers: list[RecentOffer]
 
 
 class DashboardCompanyResponse(BaseModel):
