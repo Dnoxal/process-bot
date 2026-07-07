@@ -8,7 +8,7 @@ progress with companies. Users can submit structured updates through
 commands such as:
 
     !process amazon oa
-    !process google rejected phone
+    !process google rejection
     !process stripe offer
 
 The bot stores these updates in a backend database and exposes the data
@@ -112,22 +112,17 @@ The bot should:
 Primary command:
 
     !process <company> <stage>
-    !process <company> <outcome> <stage>
+    !process <company> <terminal-outcome>
 
 Examples:
 
     !process amazon oa
-    !process google rejected phone
+    !process google rejection
     !process stripe offer
 
 ### Additional Commands
 
-    !myprocesses
-    !editprocess <id>
-    !deleteprocess <id>
-    !companies
     !stats <company>
-    !help process
 
 ------------------------------------------------------------------------
 
@@ -290,11 +285,11 @@ Bot response:
 
 User command:
 
-    !process google rejected phone
+    !process google rejection
 
 Bot response:
 
-    Logged: Google - Phone - Rejected
+    Logged: Google - Final - Rejected
 
 ------------------------------------------------------------------------
 
@@ -370,7 +365,6 @@ Minimum viable product should include:
 
 Possible later improvements:
 
--   Discord slash commands
 -   autocomplete for companies
 -   seasonal tagging (Summer 2027 etc.)
 -   CSV export

@@ -1,16 +1,16 @@
-# Oracle Free Tier Deployment
+# DigitalOcean Droplet Deployment
 
-This app runs well on an Oracle Cloud Always Free VM because it is a single Python process that serves the FastAPI dashboard and connects the Discord bot at the same time.
+This app runs well on a small DigitalOcean Ubuntu Droplet because it is a single Python process that serves the FastAPI dashboard and connects the Discord bot at the same time.
 
 ## Recommended shape
 
-- Compute: `VM.Standard.A1.Flex` if available
+- Compute: Basic Droplet, 1 GB RAM or larger
 - OS: Ubuntu 22.04 or 24.04
 - Public ports: `22`, `80`, `443`
 - Keep the app itself on `127.0.0.1:8000`
 - Put `nginx` in front if you want a public dashboard URL
 
-## Why this repo is Oracle-friendly
+## Why this repo is Droplet-friendly
 
 - Runtime only needs Python 3.10+
 - The built frontend is already committed under `process_bot/static/app`
@@ -20,13 +20,13 @@ If you later expect more writes or want easier backups, move `DATABASE_URL` to P
 
 ## 1. Create the VM
 
-Create an Ubuntu VM in Oracle Cloud and allow ingress for:
+Create an Ubuntu Droplet in DigitalOcean and allow inbound traffic for:
 
 - TCP `22` for SSH
 - TCP `80` for HTTP
 - TCP `443` for HTTPS
 
-If Oracle security rules are open but the VM still does not respond, also check Ubuntu's firewall:
+If DigitalOcean Cloud Firewall rules are open but the Droplet still does not respond, also check Ubuntu's firewall:
 
 ```bash
 sudo ufw allow 22
@@ -75,7 +75,7 @@ PROCESS_ALLOWED_CHANNEL_IDS=
 Notes:
 
 - Use `API_HOST=127.0.0.1` when `nginx` is proxying traffic
-- `DISCORD_GUILD_ID` is optional, but nice for faster slash command sync during setup
+- `DISCORD_GUILD_ID` is optional; if set, startup clears stale guild application commands
 - The SQLite path above is absolute so the service keeps using the same database no matter how it starts
 
 ## 5. Test it manually
@@ -158,18 +158,13 @@ If the frontend changes and you want a fresh build on the server, also install N
 
 - Check `DISCORD_TOKEN`
 - Check `journalctl -u process-bot -f`
-- Make sure the bot has been invited to the server with `applications.commands` and bot permissions
+- Make sure the bot has been invited to the server with bot permissions
 
 ### Website does not load from the public IP
 
-- Confirm Oracle security list or network security group allows `80` and `443`
+- Confirm your DigitalOcean Cloud Firewall allows `80` and `443`
 - Confirm `nginx` is running: `systemctl status nginx`
 - Confirm the app is healthy on the VM: `curl http://127.0.0.1:8000/api/health`
-
-### Slash commands are missing
-
-- Set `DISCORD_GUILD_ID` for your test server
-- Restart the service after updating `.env`
 
 ### Data disappeared after redeploy
 
