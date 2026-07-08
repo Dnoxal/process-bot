@@ -2,6 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from process_bot import models, services
+from process_bot.company_registry import COMPANY_REGISTRY, resolve_company
 
 
 
@@ -51,9 +52,9 @@ def test_popular_abbreviations_return_expected_companies() -> None:
         "hrt": "Hudson River Trading",
         "oai": "OpenAI",
         "c1": "Capital One",
-        "jp": "JP Morgan",
-        "jpmc": "JP Morgan",
-        "jpm": "JP Morgan",
+        "jp": "JPMorgan Chase",
+        "jpmc": "JPMorgan Chase",
+        "jpm": "JPMorgan Chase",
         "lhm": "Lockheed Martin",
         "wf": "Wells Fargo",
         "js": "Jane Street",
@@ -66,3 +67,10 @@ def test_popular_abbreviations_return_expected_companies() -> None:
             assert suggestion is not None
             assert suggestion.alias == alias
             assert suggestion.canonical_name == canonical_name
+
+
+def test_csv_company_registry_is_loaded() -> None:
+    assert len(COMPANY_REGISTRY) >= 900
+    assert resolve_company("1Password").display_name == "1Password"
+    assert resolve_company("Databricks").display_name == "Databricks"
+    assert resolve_company("1X").display_name == "1X Technologies"

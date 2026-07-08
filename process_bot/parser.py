@@ -34,18 +34,19 @@ def parse_process_command(command_body: str) -> ParsedProcessCommand:
                 "Use exactly one stage token at the end: !process <company> <stage>."
             )
 
+    possible_outcome = normalize_outcome(tokens[-1])
+    if possible_outcome and possible_outcome in TERMINAL_OUTCOMES:
+        if not tokens[:-1]:
+            raise ParseError("Please include a company name before the outcome.")
+        terminal_stage = "offer" if possible_outcome in {"offered", "accepted"} else "rejected"
+        return ParsedProcessCommand(company=" ".join(tokens[:-1]), stage=terminal_stage, outcome=possible_outcome)
+
     possible_stage = normalize_stage(tokens[-1])
 
     if possible_stage:
         if not tokens[:-1]:
             raise ParseError("Please include a company name before the stage.")
         return ParsedProcessCommand(company=" ".join(tokens[:-1]), stage=possible_stage, outcome=None)
-
-    possible_outcome = normalize_outcome(tokens[-1])
-    if possible_outcome and possible_outcome in TERMINAL_OUTCOMES:
-        if not tokens[:-1]:
-            raise ParseError("Please include a company name before the outcome.")
-        return ParsedProcessCommand(company=" ".join(tokens[:-1]), stage="final", outcome=possible_outcome)
 
     raise ParseError(
         "I couldn't recognize that stage. Try oa, behavioral, technical, offer, or rejection."

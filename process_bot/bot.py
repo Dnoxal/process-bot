@@ -8,7 +8,9 @@ from discord.ext import commands
 from process_bot.config import get_settings
 from process_bot.database import SessionLocal, init_db
 from process_bot import schemas, services
+from process_bot.normalization import stage_display_name
 from process_bot.parser import ParseError, parse_process_command
+from process_bot.stats_card import build_company_stats_card
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,7 @@ PROCESS_CHANNEL_EMPLOYMENT_TYPES = {
 PROCESS_STAGE_EXAMPLES = (
     "`!process amazon oa`\n"
     "`!process google behavioral`\n"
+    "`!process netflix technical2`\n"
     "`!process stripe offer`\n"
     "`!process meta rejection`"
 )
@@ -77,7 +80,9 @@ def get_process_channel_employment_type(channel: discord.abc.GuildChannel | disc
 def build_process_usage_message() -> str:
     return (
         "Message removed. Use `!process <company> <stage>`.\n"
+        "Companies must be in the supported CS Careers company list; common aliases like `jpmc`, `hrt`, and `oai` work.\n"
         "Stages: `oa` `behavioral` `technical` `offer` `rejection`\n"
+        "Similar stages like `codesignal`, `recruiter`, `technical2`, `onsite`, and `final` are grouped automatically.\n"
         "Examples:\n"
         f"{PROCESS_STAGE_EXAMPLES}"
     )
@@ -87,7 +92,9 @@ def build_invalid_process_message() -> str:
     return (
         "Invalid `!process` format. Message kept, not logged.\n"
         "Use `!process <company> <stage>`.\n"
+        "Companies must be in the supported CS Careers company list; common aliases like `jpmc`, `hrt`, and `oai` work.\n"
         "Stages: `oa` `behavioral` `technical` `offer` `rejection`\n"
+        "Similar stages like `codesignal`, `recruiter`, `technical2`, `onsite`, and `final` are grouped automatically.\n"
         "Examples:\n"
         f"{PROCESS_STAGE_EXAMPLES}"
     )
@@ -189,11 +196,11 @@ def build_process_logged_embed(
 
 
 def build_stage_display_name(stage: str, outcome: str | None) -> str:
-    if outcome == "offered":
+    if outcome in {"offered", "accepted"}:
         return "Offer"
-    if outcome == "rejected":
+    if outcome in {"rejected", "withdrawn"}:
         return "Rejection"
-    return stage.title()
+    return stage_display_name(stage)
 
 
 def save_process_event(
@@ -415,8 +422,7 @@ def build_bot() -> commands.Bot:
                 return
 
             with SessionLocal() as session:
-                suggestion = services.suggest_company_from_alias(session, company)
-                lookup_name = suggestion.canonical_name if suggestion else company
+                lookup_name = services.resolve_supported_company_name(company) or company
                 company_record = services.find_company(session, lookup_name)
                 stats_result = services.company_stats(session, company_record.slug) if company_record else None
 
@@ -430,8 +436,23 @@ def build_bot() -> commands.Bot:
                 )
                 return
 
+            stats_file_name = f"{stats_result.slug}-stats.png"
+            try:
+                stats_card = build_company_stats_card(stats_result)
+                content = None
+                if lookup_name != company:
+                    content = f"Showing stats for **{stats_result.company}** from `{company}`."
+                await message.reply(
+                    content=content,
+                    file=discord.File(stats_card, filename=stats_file_name),
+                    mention_author=False,
+                )
+                return
+            except Exception:  # pragma: no cover
+                logger.exception("Failed to render stats card for %s", stats_result.slug)
+
             embed = build_company_stats_embed(stats_result)
-            if suggestion:
+            if lookup_name != company:
                 embed.description = (
                     f"Showing stats for **{stats_result.company}** from `{company}`.\n\n"
                     f"{embed.description}"
@@ -469,28 +490,16 @@ def build_bot() -> commands.Bot:
             return
 
         with SessionLocal() as session:
-            suggestion = services.suggest_company_from_alias(session, parsed.company)
-        if suggestion:
-            embed = discord.Embed(
-                title=f"Did you mean {suggestion.canonical_name}?",
-                color=discord.Color.gold(),
-                description="✅ use suggestion\n✖️ keep typed",
-            )
-            embed.set_footer(text="Only the original author can use these buttons.")
+            company_name = services.resolve_supported_company_name(parsed.company)
+        if not company_name:
             await message.reply(
-                embed=embed,
-                view=MessageAliasConfirmationView(
-                    user_id=message.author.id,
-                    username=str(message.author),
-                    source_message=message,
-                    message_id=message.id,
-                    channel_id=message.channel.id,
-                    source_command=message.content,
-                    original_company=parsed.company,
-                    canonical_company=suggestion.canonical_name,
-                    stage=parsed.stage,
-                    outcome=parsed.outcome,
-                    employment_type=employment_type,
+                embed=build_notice_embed(
+                    title="Unsupported Company",
+                    description=(
+                        f"`{parsed.company}` is not in the supported CS Careers company list yet. "
+                        "Use a canonical company name or common alias like `Amazon`, `jpmc`, `hrt`, or `oai`."
+                    ),
+                    color=discord.Color.red(),
                 ),
                 mention_author=False,
             )
@@ -500,7 +509,7 @@ def build_bot() -> commands.Bot:
             event_response = save_process_event(
                 discord_user_id=str(message.author.id),
                 username=str(message.author),
-                company=parsed.company,
+                company=company_name,
                 stage=parsed.stage,
                 outcome=parsed.outcome,
                 employment_type=employment_type,

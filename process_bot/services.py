@@ -7,11 +7,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from process_bot import models, schemas
+from process_bot.company_registry import resolve_company
 from process_bot.normalization import (
+    PROCESS_STAGE_ORDER,
     infer_recruiting_season,
     normalize_company_name,
     normalize_outcome,
     normalize_stage,
+    ordered_process_distribution,
     slugify_company_name,
 )
 
@@ -24,41 +27,13 @@ EMPLOYMENT_TYPE_ALIASES = {
     "ft": "full_time",
 }
 
-KNOWN_COMPANY_ABBREVIATIONS = {
-    "amzn": "Amazon",
-    "amazonn": "Amazon",
-    "appl": "Apple",
-    "c1": "Capital One",
-    "fb": "Meta",
-    "ggl": "Google",
-    "goog": "Google",
-    "gs": "Goldman Sachs",
-    "hrt": "Hudson River Trading",
-    "insta": "Instacart",
-    "js": "Jane Street",
-    "jpm": "JP Morgan",
-    "jpmc": "JP Morgan",
-    "jp": "JP Morgan",
-    "lhm": "Lockheed Martin",
-    "meta": "Meta",
-    "msft": "Microsoft",
-    "nflx": "Netflix",
-    "oai": "OpenAI",
-    "pin": "Pinterest",
-    "pins": "Pinterest",
-    "pint": "Pinterest",
-    "rf": "Robinhood",
-    "sig": "Susquehanna International Group",
-    "tt": "TikTok",
-    "wf": "Wells Fargo",
-    "zon": "Amazon",
-}
-STAGE_FUNNEL_ORDER = ("oa", "behavioral", "technical", "final")
+STAGE_FUNNEL_ORDER = PROCESS_STAGE_ORDER
 STAGE_AUTO_BACKFILL = {
     "oa": ("oa",),
     "behavioral": ("oa", "behavioral"),
     "technical": ("oa", "behavioral", "technical"),
-    "final": ("oa", "behavioral", "technical", "final"),
+    "offer": ("oa", "behavioral", "technical", "offer"),
+    "rejected": ("rejected",),
 }
 
 
@@ -72,26 +47,22 @@ def implied_stage_path(stage: str) -> tuple[str, ...]:
     return STAGE_AUTO_BACKFILL.get(stage, (stage,))
 
 
-def observed_company_backfill_path(
-    session: Session,
-    *,
-    company_id: int,
-    stage: str,
-    employment_type: str | None,
-) -> tuple[str, ...]:
-    candidate_stages = implied_stage_path(stage)[:-1]
-    if not candidate_stages:
-        return ()
+def process_stage_for_event(event: models.ProcessEvent) -> str | None:
+    if event.outcome in {"offered", "accepted"}:
+        return "offer"
+    if event.outcome in {"rejected", "withdrawn"}:
+        return None
+    stage = normalize_stage(event.stage) or event.stage
+    if stage in PROCESS_STAGE_ORDER:
+        return stage
+    if stage == "final":
+        return "technical"
+    return None
 
-    observed_stages = set(
-        session.scalars(
-            select(models.ProcessEvent.stage).where(
-                models.ProcessEvent.company_id == company_id,
-                models.ProcessEvent.employment_type == employment_type,
-            )
-        ).all()
-    )
-    return tuple(candidate_stage for candidate_stage in candidate_stages if candidate_stage in observed_stages)
+
+def process_stage_distribution(events: list[models.ProcessEvent]) -> dict[str, int]:
+    counts = Counter(stage for event in events if (stage := process_stage_for_event(event)))
+    return ordered_process_distribution(dict(counts))
 
 
 def normalize_employment_type(raw_employment_type: str | None) -> str | None:
@@ -127,6 +98,11 @@ def get_or_create_company(session: Session, company_name: str) -> models.Company
     return company
 
 
+def resolve_supported_company_name(company_name: str) -> str | None:
+    registered_company = resolve_company(company_name)
+    return registered_company.display_name if registered_company else None
+
+
 def find_company(session: Session, company_name: str) -> models.Company | None:
     normalized_name = normalize_company_name(company_name)
     slug = slugify_company_name(normalized_name)
@@ -153,10 +129,11 @@ def suggest_company_from_alias(session: Session, company_name: str) -> CompanyAl
     if existing_alias:
         return None
 
-    canonical_name = KNOWN_COMPANY_ABBREVIATIONS.get(alias_slug)
-    if not canonical_name:
+    registered_company = resolve_company(company_name)
+    if not registered_company:
         return None
 
+    canonical_name = registered_company.display_name
     canonical_slug = slugify_company_name(canonical_name)
     if alias_slug == canonical_slug:
         return None
@@ -189,7 +166,14 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
     employment_type = normalize_employment_type(payload.employment_type)
     if payload.employment_type and not employment_type:
         raise ValueError(f"Unsupported employment type: {payload.employment_type}")
-    company = get_or_create_company(session, payload.company)
+
+    supported_company_name = resolve_supported_company_name(payload.company)
+    if not supported_company_name:
+        raise ValueError(
+            f"Unsupported company: {payload.company}. Use a company from the CS Careers supported company list."
+        )
+
+    company = get_or_create_company(session, supported_company_name)
     user = get_or_create_user(session, discord_user_id=payload.discord_user_id, username=payload.username)
     company_id = company.id
     user_id = user.id
@@ -217,12 +201,7 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
     }
     existing_stage_names = set(existing_stage_events)
 
-    backfill_path = observed_company_backfill_path(
-        session,
-        company_id=company_id,
-        stage=stage,
-        employment_type=employment_type,
-    )
+    backfill_path = implied_stage_path(stage)[:-1]
     for backfill_stage in backfill_path:
         if backfill_stage in existing_stage_names:
             continue
@@ -383,7 +362,7 @@ def dashboard_overview(session: Session, employment_type: str = "all") -> schema
     total_candidates = len({event.user_id for event in events})
     total_companies = len({event.company_id for event in events})
     offers = sum(1 for event in events if event.outcome == "offered")
-    stage_distribution = dict(Counter(event.stage for event in events))
+    stage_distribution = process_stage_distribution(events)
     outcome_distribution = dict(Counter(event.outcome for event in events if event.outcome))
 
     all_employment_rows = session.scalars(select(models.ProcessEvent.employment_type)).all()
@@ -457,21 +436,22 @@ def dashboard_company(session: Session, company_slug: str, employment_type: str 
             funnel_points=[],
         )
 
-    stage_distribution = dict(Counter(event.stage for event in events))
+    stage_distribution = process_stage_distribution(events)
     outcome_distribution = dict(Counter(event.outcome for event in events if event.outcome))
     trend_counts = Counter(str(event.occurred_at.date()) for event in events)
     ordered_trends = sorted(trend_counts.items())
     user_stage_reach: dict[int, set[str]] = {}
     for event in events:
         reached = user_stage_reach.setdefault(event.user_id, set())
-        reached.update(implied_stage_path(event.stage))
+        process_stage = process_stage_for_event(event)
+        if process_stage:
+            reached.update(implied_stage_path(process_stage))
 
     funnel_counts = [
         ("OA", sum(1 for reached in user_stage_reach.values() if "oa" in reached)),
         ("Behavioral", sum(1 for reached in user_stage_reach.values() if "behavioral" in reached)),
         ("Technical", sum(1 for reached in user_stage_reach.values() if "technical" in reached)),
-        ("Offers", len({event.user_id for event in events if event.outcome == "offered"})),
-        ("Rejections", len({event.user_id for event in events if event.outcome == "rejected"})),
+        ("Offer", sum(1 for reached in user_stage_reach.values() if "offer" in reached)),
     ]
     funnel_base = funnel_counts[0][1] if funnel_counts else 0
     funnel_points = [
@@ -500,9 +480,8 @@ def global_stats(session: Session) -> schemas.GlobalStatsResponse:
     total_users = session.scalar(select(func.count(models.User.id))) or 0
     total_companies = session.scalar(select(func.count(models.Company.id))) or 0
 
-    stage_counts = Counter(
-        dict(session.execute(select(models.ProcessEvent.stage, func.count()).group_by(models.ProcessEvent.stage)).all())
-    )
+    events = session.scalars(select(models.ProcessEvent)).all()
+    stage_counts = process_stage_distribution(events)
     outcome_counts = Counter(
         dict(
             session.execute(
@@ -536,7 +515,7 @@ def company_stats(session: Session, company_slug: str) -> schemas.CompanyStatsRe
         return None
 
     rows = session.scalars(select(models.ProcessEvent).where(models.ProcessEvent.company_id == company.id)).all()
-    stage_counts = Counter(row.stage for row in rows)
+    stage_counts = process_stage_distribution(rows)
     outcome_counts = Counter(row.outcome for row in rows if row.outcome)
     latest_activity = max((row.occurred_at for row in rows), default=None)
     total_candidates = len({row.user_id for row in rows})
@@ -546,7 +525,7 @@ def company_stats(session: Session, company_slug: str) -> schemas.CompanyStatsRe
         total_events=len(rows),
         total_candidates=total_candidates,
         latest_activity=latest_activity,
-        stage_distribution=dict(stage_counts),
+        stage_distribution=stage_counts,
         outcome_distribution=dict(outcome_counts),
     )
 

@@ -20,22 +20,36 @@ def test_parse_multiword_company_command() -> None:
 def test_parse_terminal_outcome_only_command() -> None:
     parsed = parse_process_command("stripe offer")
     assert parsed.company == "stripe"
-    assert parsed.stage == "final"
+    assert parsed.stage == "offer"
     assert parsed.outcome == "offered"
 
 
 def test_parse_rejection_alias_command() -> None:
     parsed = parse_process_command("google rejection")
     assert parsed.company == "google"
-    assert parsed.stage == "final"
+    assert parsed.stage == "rejected"
     assert parsed.outcome == "rejected"
 
 
 def test_parse_rej_alias_command() -> None:
     parsed = parse_process_command("google rej")
     assert parsed.company == "google"
-    assert parsed.stage == "final"
+    assert parsed.stage == "rejected"
     assert parsed.outcome == "rejected"
+
+
+def test_parse_numbered_technical_maps_to_technical() -> None:
+    parsed = parse_process_command("netflix technical2")
+    assert parsed.company == "netflix"
+    assert parsed.stage == "technical"
+    assert parsed.outcome is None
+
+
+def test_parse_codesignal_maps_to_oa() -> None:
+    parsed = parse_process_command("databricks codesignal")
+    assert parsed.company == "databricks"
+    assert parsed.stage == "oa"
+    assert parsed.outcome is None
 
 
 def test_parse_phone_maps_to_behavioral() -> None:
