@@ -21,6 +21,7 @@ BLUE = (37, 99, 235)
 AMBER = (217, 119, 6)
 RED = (220, 38, 38)
 INK = (17, 24, 39)
+SHADOW = (224, 230, 240)
 
 
 def _font(size: int, *, bold: bool = False) -> ImageFont.ImageFont:
@@ -86,11 +87,20 @@ def _draw_metric(
     value: str,
     accent: tuple[int, int, int],
 ) -> None:
-    draw.rounded_rectangle(box, radius=16, fill=PANEL, outline=SUBTLE, width=1)
-    x1, y1, _, _ = box
-    draw.rounded_rectangle((x1 + 22, y1 + 22, x1 + 30, y1 + 86), radius=4, fill=accent)
+    x1, y1, x2, y2 = box
+    draw.rounded_rectangle((x1, y1 + 6, x2, y2 + 6), radius=18, fill=SHADOW)
+    draw.rounded_rectangle(box, radius=18, fill=PANEL, outline=SUBTLE, width=1)
+    draw.rounded_rectangle((x1 + 22, y1 + 22, x1 + 32, y1 + 86), radius=5, fill=accent)
     _draw_text(draw, (x1 + 48, y1 + 22), label.upper(), font=_font(17, bold=True), fill=MUTED)
-    _draw_text(draw, (x1 + 48, y1 + 52), value, font=_font(40, bold=True), fill=TEXT)
+    _draw_fit_text(
+        draw,
+        (x1 + 48, y1 + 54),
+        value,
+        max_width=x2 - x1 - 72,
+        size=43,
+        bold=True,
+        min_size=24,
+    )
 
 
 def _draw_process_activity(
@@ -98,8 +108,9 @@ def _draw_process_activity(
     box: tuple[int, int, int, int],
     distribution: dict[str, int],
 ) -> None:
-    draw.rounded_rectangle(box, radius=18, fill=PANEL, outline=SUBTLE, width=1)
     x1, y1, x2, _ = box
+    draw.rounded_rectangle((x1, y1 + 8, x2, box[3] + 8), radius=20, fill=SHADOW)
+    draw.rounded_rectangle(box, radius=20, fill=PANEL, outline=SUBTLE, width=1)
     _draw_text(draw, (x1 + 30, y1 + 26), "Process Activity", font=_font(31, bold=True), fill=TEXT)
     _draw_text(draw, (x1 + 32, y1 + 68), "Grouped as OA -> Behavioral -> Technical -> Offer", font=_font(19), fill=MUTED)
 
@@ -128,8 +139,9 @@ def _draw_outcome_mix(
     box: tuple[int, int, int, int],
     distribution: dict[str, int],
 ) -> None:
-    draw.rounded_rectangle(box, radius=18, fill=PANEL, outline=SUBTLE, width=1)
-    x1, y1, x2, _ = box
+    x1, y1, x2, y2 = box
+    draw.rounded_rectangle((x1, y1 + 8, x2, y2 + 8), radius=20, fill=SHADOW)
+    draw.rounded_rectangle(box, radius=20, fill=PANEL, outline=SUBTLE, width=1)
     _draw_text(draw, (x1 + 30, y1 + 26), "Outcomes", font=_font(31, bold=True), fill=TEXT)
     _draw_fit_text(
         draw,
@@ -148,7 +160,8 @@ def _draw_outcome_mix(
     y = y1 + 136
     for label, count, color in rows:
         percent = round((count / total) * 100) if total else 0
-        draw.rounded_rectangle((x1 + 30, y, x2 - 30, y + 92), radius=14, fill=(248, 250, 252), outline=SUBTLE)
+        draw.rounded_rectangle((x1 + 30, y + 4, x2 - 30, y + 96), radius=16, fill=(233, 239, 248))
+        draw.rounded_rectangle((x1 + 30, y, x2 - 30, y + 92), radius=16, fill=(248, 250, 252), outline=SUBTLE)
         draw.ellipse((x1 + 54, y + 30, x1 + 82, y + 58), fill=color)
         _draw_text(draw, (x1 + 102, y + 22), label, font=_font(24, bold=True), fill=INK)
         _draw_text(draw, (x1 + 102, y + 54), f"{percent}% of outcomes", font=_font(18), fill=MUTED)
@@ -160,7 +173,15 @@ def build_company_stats_card(stats_result: schemas.CompanyStatsResponse) -> Byte
     image = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND)
     draw = ImageDraw.Draw(image)
 
-    _draw_text(draw, (58, 42), f"{stats_result.company} Stats", font=_font(54, bold=True), fill=TEXT)
+    _draw_fit_text(
+        draw,
+        (58, 42),
+        f"{stats_result.company} Stats",
+        max_width=WIDTH - 116,
+        size=54,
+        bold=True,
+        min_size=34,
+    )
     _draw_text(draw, (62, 106), "Recruiting process insights from Discord activity", font=_font(23), fill=MUTED)
 
     latest = "No activity yet"

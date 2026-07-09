@@ -98,9 +98,13 @@ def get_or_create_company(session: Session, company_name: str) -> models.Company
     return company
 
 
-def resolve_supported_company_name(company_name: str) -> str | None:
+def resolve_supported_company_name(session: Session, company_name: str) -> str | None:
     registered_company = resolve_company(company_name)
-    return registered_company.display_name if registered_company else None
+    if registered_company:
+        return registered_company.display_name
+
+    company = find_company(session, company_name)
+    return company.name if company else None
 
 
 def find_company(session: Session, company_name: str) -> models.Company | None:
@@ -167,7 +171,7 @@ def create_process_event(session: Session, payload: schemas.ProcessEventCreate) 
     if payload.employment_type and not employment_type:
         raise ValueError(f"Unsupported employment type: {payload.employment_type}")
 
-    supported_company_name = resolve_supported_company_name(payload.company)
+    supported_company_name = resolve_supported_company_name(session, payload.company)
     if not supported_company_name:
         raise ValueError(
             f"Unsupported company: {payload.company}. Use a company from the CS Careers supported company list."

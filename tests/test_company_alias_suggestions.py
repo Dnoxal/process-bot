@@ -74,3 +74,13 @@ def test_csv_company_registry_is_loaded() -> None:
     assert resolve_company("1Password").display_name == "1Password"
     assert resolve_company("Databricks").display_name == "Databricks"
     assert resolve_company("1X").display_name == "1X Technologies"
+
+
+def test_resolve_supported_company_name_accepts_db_approved_company() -> None:
+    with build_session() as session:
+        services.get_or_create_company(session, "Municipal Bond Research Partners")
+        session.commit()
+
+        resolved = services.resolve_supported_company_name(session, "Municipal Bond Research Partners")
+
+    assert resolved == "Municipal Bond Research Partners"

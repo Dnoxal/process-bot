@@ -77,6 +77,14 @@ def get_process_channel_employment_type(channel: discord.abc.GuildChannel | disc
     return PROCESS_CHANNEL_EMPLOYMENT_TYPES.get(channel_name)
 
 
+def can_manage_companies(member: discord.abc.User | discord.Member) -> bool:
+    if not settings.company_manager_role_ids:
+        return False
+    if not isinstance(member, discord.Member):
+        return False
+    return any(role.id in settings.company_manager_role_ids for role in member.roles)
+
+
 def build_process_usage_message() -> str:
     return (
         "Message removed. Use `!process <company> <stage>`.\n"
@@ -422,7 +430,7 @@ def build_bot() -> commands.Bot:
                 return
 
             with SessionLocal() as session:
-                lookup_name = services.resolve_supported_company_name(company) or company
+                lookup_name = services.resolve_supported_company_name(session, company) or company
                 company_record = services.find_company(session, lookup_name)
                 stats_result = services.company_stats(session, company_record.slug) if company_record else None
 
@@ -490,7 +498,7 @@ def build_bot() -> commands.Bot:
             return
 
         with SessionLocal() as session:
-            company_name = services.resolve_supported_company_name(parsed.company)
+            company_name = services.resolve_supported_company_name(session, parsed.company)
         if not company_name:
             await message.reply(
                 embed=build_notice_embed(
@@ -535,6 +543,45 @@ def build_bot() -> commands.Bot:
                 user_mention=message.author.mention,
                 company_name=event_response.company,
             )
+
+    @bot.tree.command(name="addcompany", description="Approve a new company for !process logging")
+    @app_commands.describe(
+        company="Canonical company name to approve",
+        aliases="Optional comma-separated aliases such as jpmc, jp morgan",
+    )
+    async def addcompany(interaction: discord.Interaction, company: str, aliases: str | None = None) -> None:
+        if not can_manage_companies(interaction.user):
+            await interaction.response.send_message(
+                embed=build_notice_embed(
+                    title="Missing Role",
+                    description="You do not have one of the configured company manager roles.",
+                    color=discord.Color.red(),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        alias_values = [alias.strip() for alias in (aliases or "").split(",") if alias.strip()]
+        with SessionLocal() as session:
+            company_record = services.get_or_create_company(session, company)
+            saved_aliases: list[str] = []
+            for alias in alias_values:
+                alias_record = services.create_company_alias(session, company_record.slug, alias)
+                saved_aliases.append(alias_record.alias)
+            session.commit()
+
+        alias_summary = ", ".join(saved_aliases) if saved_aliases else "No aliases added."
+        await interaction.response.send_message(
+            embed=build_notice_embed(
+                title="Company Approved",
+                description=(
+                    f"Approved **{company_record.name}** for `!process` logging.\n"
+                    f"Aliases: {alias_summary}"
+                ),
+                color=discord.Color.brand_green(),
+            ),
+            ephemeral=True,
+        )
 
     return bot
 

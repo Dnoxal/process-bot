@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     discord_command_prefix: str = Field(default="!", alias="DISCORD_COMMAND_PREFIX")
     discord_guild_id: int | None = Field(default=None, alias="DISCORD_GUILD_ID")
     allowed_channel_ids_raw: str = Field(default="", alias="PROCESS_ALLOWED_CHANNEL_IDS")
+    company_manager_role_ids_raw: str = Field(default="", alias="PROCESS_COMPANY_MANAGER_ROLE_IDS")
     api_token: str = Field(default="", alias="PROCESS_API_TOKEN")
     public_dashboard: bool = Field(default=True, alias="PROCESS_PUBLIC_DASHBOARD")
     database_url: str = Field(
@@ -58,6 +59,16 @@ class Settings(BaseSettings):
             int(channel_id.strip())
             for channel_id in self.allowed_channel_ids_raw.split(",")
             if channel_id.strip()
+        }
+
+    @property
+    def company_manager_role_ids(self) -> set[int]:
+        if not self.company_manager_role_ids_raw.strip():
+            return set()
+        return {
+            int(role_id.strip())
+            for role_id in self.company_manager_role_ids_raw.split(",")
+            if role_id.strip()
         }
 
 

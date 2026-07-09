@@ -50,6 +50,7 @@ For a DigitalOcean Droplet, use the deployment guide in [docs/digitalocean-dropl
 - `!process <company> <stage>` logs a recruiting update in a recognized process channel
 - `!process <company> <terminal-outcome>` logs final outcomes such as offers, rejections, acceptances, or withdrawals
 - `!stats <company>` replies with aggregate stats for a tracked company
+- `/addcompany company:<name> aliases:<optional>` approves a new company for `!process`, but only for members with one of the configured manager roles
 
 The bot infers the employment track from the channel name. These channel names are recognized:
 
@@ -80,6 +81,7 @@ The bot infers the employment track from the channel name. These channel names a
 ## Notes
 
 - `PROCESS_ALLOWED_CHANNEL_IDS` accepts a comma-separated list. Leave it blank to allow commands in any channel.
+- `PROCESS_COMPANY_MANAGER_ROLE_IDS` accepts a comma-separated list of Discord role IDs allowed to run `/addcompany`.
 - `PROCESS_API_TOKEN` protects write, delete, admin, and user-specific HTTP API routes. Leave it unset only if those routes should be unusable.
 - `PROCESS_PUBLIC_DASHBOARD` defaults to `true`. Set it to `false` only if the dashboard/API are behind proxy auth or you are okay with the browser dashboard failing unauthenticated API requests.
 - The database defaults to `./data/process_bot.db`.
