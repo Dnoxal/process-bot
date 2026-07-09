@@ -386,27 +386,15 @@ def build_bot() -> commands.Bot:
     async def on_ready() -> None:
         init_db()
         try:
-            bot.tree.clear_commands(guild=None)
-            global_synced = await bot.tree.sync()
-
-            guild_ids = {guild.id for guild in bot.guilds}
             if settings.discord_guild_id:
-                guild_ids.add(settings.discord_guild_id)
-
-            guild_results: dict[int, int] = {}
-            for guild_id in sorted(guild_ids):
-                guild = discord.Object(id=guild_id)
-                bot.tree.clear_commands(guild=guild)
-                guild_synced = await bot.tree.sync(guild=guild)
-                guild_results[guild_id] = len(guild_synced)
-
-            logger.info(
-                "Cleared application commands; %s global commands and guild counts %s remain",
-                len(global_synced),
-                guild_results,
-            )
+                guild = discord.Object(id=settings.discord_guild_id)
+                synced = await bot.tree.sync(guild=guild)
+                logger.info("Synced %s guild commands for guild %s", len(synced), settings.discord_guild_id)
+            else:
+                synced = await bot.tree.sync()
+                logger.info("Synced %s global commands", len(synced))
         except Exception:  # pragma: no cover
-            logger.exception("Failed to clear application commands")
+            logger.exception("Failed to sync application commands")
         logger.info("Logged in as %s", bot.user)
 
     @bot.event
