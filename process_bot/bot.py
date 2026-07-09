@@ -406,6 +406,8 @@ def build_bot() -> commands.Bot:
 
         content = message.content.strip()
         if content.startswith("!stats"):
+            if not get_process_channel_employment_type(message.channel):
+                return
             company = content[len("!stats") :].strip()
             if not company:
                 await message.reply(
