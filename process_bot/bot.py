@@ -1,6 +1,7 @@
 import logging
 
 import discord
+from discord import app_commands
 from discord import Message
 from discord.errors import PrivilegedIntentsRequired
 from discord.ext import commands
