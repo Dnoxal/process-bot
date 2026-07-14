@@ -45,6 +45,20 @@ def test_parse_numbered_technical_maps_to_technical() -> None:
     assert parsed.outcome is None
 
 
+def test_parse_r1_maps_to_technical() -> None:
+    parsed = parse_process_command("amazon r1")
+    assert parsed.company == "amazon"
+    assert parsed.stage == "technical"
+    assert parsed.outcome is None
+
+
+def test_parse_vo_maps_to_technical() -> None:
+    parsed = parse_process_command("amazon vo")
+    assert parsed.company == "amazon"
+    assert parsed.stage == "technical"
+    assert parsed.outcome is None
+
+
 def test_parse_codesignal_maps_to_oa() -> None:
     parsed = parse_process_command("databricks codesignal")
     assert parsed.company == "databricks"
@@ -78,6 +92,20 @@ def test_parse_superday_maps_to_technical() -> None:
     assert parsed.company == "amazon"
     assert parsed.stage == "technical"
     assert parsed.outcome is None
+
+
+def test_parse_ignores_notes_after_stage() -> None:
+    parsed = parse_process_command("amazon technical r1 went okay")
+    assert parsed.company == "amazon"
+    assert parsed.stage == "technical"
+    assert parsed.outcome is None
+
+
+def test_parse_ignores_notes_after_terminal_outcome() -> None:
+    parsed = parse_process_command("stripe offer exploding rn")
+    assert parsed.company == "stripe"
+    assert parsed.stage == "offer"
+    assert parsed.outcome == "offered"
 
 
 def test_parse_requires_supported_suffix() -> None:

@@ -20,33 +20,43 @@ def parse_process_command(command_body: str) -> ParsedProcessCommand:
     if len(tokens) < 2:
         raise ParseError("Usage: !process <company> <stage>")
 
-    if len(tokens) >= 3:
-        reserved_token = next(
+    for index in range(1, len(tokens)):
+        token = tokens[index]
+        possible_outcome = normalize_outcome(token)
+        possible_stage = normalize_stage(token)
+
+        if not possible_outcome and not possible_stage:
+            if normalize_employment_type(token):
+                raise ParseError(
+                    "Employment type is inferred from the channel. Use `!process <company> <stage>`."
+                )
+            continue
+
+        company_tokens = tokens[:index]
+        reserved_company_token = next(
             (
-                token
-                for token in tokens[:-1]
-                if normalize_stage(token) or normalize_outcome(token) or normalize_employment_type(token)
+                company_token
+                for company_token in company_tokens
+                if normalize_stage(company_token)
+                or normalize_outcome(company_token)
+                or normalize_employment_type(company_token)
             ),
             None,
         )
-        if reserved_token:
+        if reserved_company_token:
             raise ParseError(
-                "Use exactly one stage token at the end: !process <company> <stage>."
+                "Use `!process <company> <stage>` and put any notes after the stage."
             )
 
-    possible_outcome = normalize_outcome(tokens[-1])
-    if possible_outcome and possible_outcome in TERMINAL_OUTCOMES:
-        if not tokens[:-1]:
-            raise ParseError("Please include a company name before the outcome.")
-        terminal_stage = "offer" if possible_outcome in {"offered", "accepted"} else "rejected"
-        return ParsedProcessCommand(company=" ".join(tokens[:-1]), stage=terminal_stage, outcome=possible_outcome)
-
-    possible_stage = normalize_stage(tokens[-1])
-
-    if possible_stage:
-        if not tokens[:-1]:
+        if not company_tokens:
             raise ParseError("Please include a company name before the stage.")
-        return ParsedProcessCommand(company=" ".join(tokens[:-1]), stage=possible_stage, outcome=None)
+
+        if possible_outcome and possible_outcome in TERMINAL_OUTCOMES:
+            terminal_stage = "offer" if possible_outcome in {"offered", "accepted"} else "rejected"
+            return ParsedProcessCommand(company=" ".join(company_tokens), stage=terminal_stage, outcome=possible_outcome)
+
+        if possible_stage:
+            return ParsedProcessCommand(company=" ".join(company_tokens), stage=possible_stage, outcome=None)
 
     raise ParseError(
         "I couldn't recognize that stage. Try oa, behavioral, technical, offer, or rejection."
