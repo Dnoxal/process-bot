@@ -27,10 +27,8 @@ PROCESS_CHANNEL_EMPLOYMENT_TYPES = {
 }
 PROCESS_STAGE_EXAMPLES = (
     "`!process amazon oa`\n"
-    "`!process google behavioral`\n"
-    "`!process netflix technical2`\n"
     "`!process stripe offer`\n"
-    "`!process meta rejection`"
+    "`!process google technical r1 went well`"
 )
 
 
@@ -89,10 +87,9 @@ def can_manage_companies(member: discord.abc.User | discord.Member) -> bool:
 
 def build_process_usage_message() -> str:
     return (
-        "Message removed. Use `!process <company> <stage>`.\n"
-        "Companies must be in the supported CS Careers company list; common aliases like `jpmc`, `hrt`, and `oai` work.\n"
+        "Use `!process <company> <stage> <optional notes>`.\n"
         "Stages: `oa` `behavioral` `technical` `offer` `rejection`\n"
-        "Similar stages like `codesignal`, `recruiter`, `technical2`, `onsite`, and `final` are grouped automatically.\n"
+        "Anything after the stage is treated as notes and ignored for logging.\n"
         "Examples:\n"
         f"{PROCESS_STAGE_EXAMPLES}"
     )
@@ -100,11 +97,10 @@ def build_process_usage_message() -> str:
 
 def build_invalid_process_message() -> str:
     return (
-        "Invalid `!process` format. Message kept, not logged.\n"
-        "Use `!process <company> <stage>`.\n"
-        "Companies must be in the supported CS Careers company list; common aliases like `jpmc`, `hrt`, and `oai` work.\n"
+        "Couldn’t parse that `!process` command.\n"
+        "Use `!process <company> <stage> <optional notes>`.\n"
         "Stages: `oa` `behavioral` `technical` `offer` `rejection`\n"
-        "Similar stages like `codesignal`, `recruiter`, `technical2`, `onsite`, and `final` are grouped automatically.\n"
+        "Anything after the stage is treated as notes and ignored for logging.\n"
         "Examples:\n"
         f"{PROCESS_STAGE_EXAMPLES}"
     )
@@ -496,8 +492,8 @@ def build_bot() -> commands.Bot:
                 embed=build_notice_embed(
                     title="Unsupported Company",
                     description=(
-                        f"`{parsed.company}` is not in the supported CS Careers company list yet. "
-                        "Use a canonical company name or common alias like `Amazon`, `jpmc`, `hrt`, or `oai`."
+                        f"`{parsed.company}` isn’t supported yet. "
+                        "Use the accepted company name or ask a mod to add it."
                     ),
                     color=discord.Color.red(),
                 ),
