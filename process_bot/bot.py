@@ -16,6 +16,7 @@ from process_bot.stats_card import build_company_stats_card
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+STATS_CHANNEL_ID = 1526448010060365855
 PROCESS_CHANNEL_EMPLOYMENT_TYPES = {
     "process": "intern",
     "summer_2026_intern_process": "intern",
@@ -406,7 +407,7 @@ def build_bot() -> commands.Bot:
 
         content = message.content.strip()
         if content.startswith("!stats"):
-            if not get_process_channel_employment_type(message.channel):
+            if message.channel.id != STATS_CHANNEL_ID:
                 return
             company = content[len("!stats") :].strip()
             if not company:
