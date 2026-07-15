@@ -18,7 +18,7 @@ from process_bot.stats_card import build_company_stats_card
 logger = logging.getLogger(__name__)
 settings = get_settings()
 STATS_CHANNEL_ID = 1526448010060365855
-INVALID_PROCESS_NOTICE_COOLDOWN_SECONDS = 15 * 60
+INVALID_PROCESS_NOTICE_COOLDOWN_SECONDS = 6 * 60 * 60
 invalid_process_notice_sent_at: dict[int, float] = {}
 PROCESS_CHANNEL_EMPLOYMENT_TYPES = {
     "process": "intern",
@@ -482,15 +482,6 @@ def build_bot() -> commands.Bot:
         if not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
             return
         if not content.startswith("!process"):
-            try:
-                await message.delete()
-            except (discord.Forbidden, discord.HTTPException) as exc:
-                logger.warning(
-                    "Failed to delete non-process message %s in channel %s: %s",
-                    message.id,
-                    message.channel.id,
-                    exc,
-                )
             await add_failure_reaction(message)
             if should_send_invalid_process_notice(message.channel.id):
                 await message.channel.send(
