@@ -107,6 +107,17 @@ def resolve_supported_company_name(session: Session, company_name: str) -> str |
     return company.name if company else None
 
 
+def extract_supported_company_name(session: Session, text: str) -> str | None:
+    tokens = [token for token in text.strip().split() if token]
+    for span_length in range(len(tokens), 0, -1):
+        for start in range(0, len(tokens) - span_length + 1):
+            candidate = " ".join(tokens[start : start + span_length])
+            resolved = resolve_supported_company_name(session, candidate)
+            if resolved:
+                return resolved
+    return None
+
+
 def find_company(session: Session, company_name: str) -> models.Company | None:
     normalized_name = normalize_company_name(company_name)
     slug = slugify_company_name(normalized_name)

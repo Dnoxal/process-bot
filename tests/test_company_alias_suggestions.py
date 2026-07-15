@@ -84,3 +84,17 @@ def test_resolve_supported_company_name_accepts_db_approved_company() -> None:
         resolved = services.resolve_supported_company_name(session, "Municipal Bond Research Partners")
 
     assert resolved == "Municipal Bond Research Partners"
+
+
+def test_extract_supported_company_name_finds_company_with_extra_tokens() -> None:
+    with build_session() as session:
+        resolved = services.extract_supported_company_name(session, "citadel swe r1")
+
+    assert resolved == "Citadel"
+
+
+def test_extract_supported_company_name_finds_multiword_company_with_role_tokens() -> None:
+    with build_session() as session:
+        resolved = services.extract_supported_company_name(session, "jane street swe r2")
+
+    assert resolved == "Jane Street"

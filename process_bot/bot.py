@@ -501,6 +501,8 @@ def build_bot() -> commands.Bot:
 
         with SessionLocal() as session:
             company_name = services.resolve_supported_company_name(session, parsed.company)
+            if not company_name:
+                company_name = services.extract_supported_company_name(session, command_body)
         if not company_name:
             await add_failure_reaction(message)
             await message.reply(
