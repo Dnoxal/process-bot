@@ -82,6 +82,7 @@ The bot infers the employment track from the channel name. These channel names a
 
 - `PROCESS_ALLOWED_CHANNEL_IDS` accepts a comma-separated list. Leave it blank to allow commands in any channel.
 - `PROCESS_COMPANY_MANAGER_ROLE_IDS` accepts a comma-separated list of Discord role IDs allowed to run `/addcompany`.
+- `PROCESS_COMPANY_MANAGER_USER_IDS` accepts a comma-separated list of Discord user IDs allowed to run `/addcompany` even without those roles.
 - `PROCESS_API_TOKEN` protects write, delete, admin, and user-specific HTTP API routes. Leave it unset only if those routes should be unusable.
 - `PROCESS_PUBLIC_DASHBOARD` defaults to `true`. Set it to `false` only if the dashboard/API are behind proxy auth or you are okay with the browser dashboard failing unauthenticated API requests.
 - The database defaults to `./data/process_bot.db`.

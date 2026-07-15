@@ -1,4 +1,5 @@
 import logging
+import time
 
 import discord
 from discord import app_commands
@@ -17,6 +18,8 @@ from process_bot.stats_card import build_company_stats_card
 logger = logging.getLogger(__name__)
 settings = get_settings()
 STATS_CHANNEL_ID = 1526448010060365855
+INVALID_PROCESS_NOTICE_COOLDOWN_SECONDS = 15 * 60
+invalid_process_notice_sent_at: dict[int, float] = {}
 PROCESS_CHANNEL_EMPLOYMENT_TYPES = {
     "process": "intern",
     "summer_2026_intern_process": "intern",
@@ -78,8 +81,8 @@ def get_process_channel_employment_type(channel: discord.abc.GuildChannel | disc
 
 
 def can_manage_companies(member: discord.abc.User | discord.Member) -> bool:
-    if not settings.company_manager_role_ids:
-        return False
+    if member.id in settings.company_manager_user_ids:
+        return True
     if not isinstance(member, discord.Member):
         return False
     return any(role.id in settings.company_manager_role_ids for role in member.roles)
@@ -243,6 +246,22 @@ async def add_success_reaction(message: Message) -> None:
         await message.add_reaction("✅")
     except (discord.Forbidden, discord.HTTPException):
         logger.warning("Failed to add success reaction to message %s", message.id)
+
+
+async def add_failure_reaction(message: Message) -> None:
+    try:
+        await message.add_reaction("❌")
+    except (discord.Forbidden, discord.HTTPException):
+        logger.warning("Failed to add failure reaction to message %s", message.id)
+
+
+def should_send_invalid_process_notice(channel_id: int) -> bool:
+    now = time.monotonic()
+    last_sent_at = invalid_process_notice_sent_at.get(channel_id)
+    if last_sent_at is not None and now - last_sent_at < INVALID_PROCESS_NOTICE_COOLDOWN_SECONDS:
+        return False
+    invalid_process_notice_sent_at[channel_id] = now
+    return True
 
 
 async def send_offer_congratulations(
@@ -472,22 +491,27 @@ def build_bot() -> commands.Bot:
                     message.channel.id,
                     exc,
                 )
-            await message.channel.send(
-                content=message.author.mention,
-                embed=build_process_usage_embed(),
-            )
+            await add_failure_reaction(message)
+            if should_send_invalid_process_notice(message.channel.id):
+                await message.channel.send(
+                    content=message.author.mention,
+                    embed=build_process_usage_embed(),
+                )
             return
 
         command_body = content[len("!process") :].strip()
         try:
             parsed = parse_process_command(command_body)
         except ParseError:
-            await message.reply(embed=build_invalid_process_embed(), mention_author=False)
+            await add_failure_reaction(message)
+            if should_send_invalid_process_notice(message.channel.id):
+                await message.reply(embed=build_invalid_process_embed(), mention_author=False)
             return
 
         with SessionLocal() as session:
             company_name = services.resolve_supported_company_name(session, parsed.company)
         if not company_name:
+            await add_failure_reaction(message)
             await message.reply(
                 embed=build_notice_embed(
                     title="Unsupported Company",
@@ -514,6 +538,7 @@ def build_bot() -> commands.Bot:
                 source_command=message.content,
             )
         except ValueError as exc:
+            await add_failure_reaction(message)
             await message.reply(
                 embed=build_notice_embed(
                     title="Could Not Log Process",
